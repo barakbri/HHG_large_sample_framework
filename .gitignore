@@ -2,8 +2,8 @@
 .Rhistory
 .Rapp.history
 
-# Session Data files
-.RData
+# Session Data files - note, I am including them, as they contains results for the paper
+#.RData
 
 # Example code in package build process
 *-Ex.R
