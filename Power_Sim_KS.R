@@ -1,5 +1,5 @@
 setwd('~')
-NR_CORES = detectCores() - 1 # currently set to 7, for reproducability
+
 
 
 library(kernlab)
@@ -10,7 +10,7 @@ library(parallel)
 library(doParallel)
 library(foreach)
 library(doRNG)
-
+NR_CORES = detectCores() - 1 # currently set to 7, for reproducability
 set.seed(1)
 
 #function for generating data
@@ -28,20 +28,20 @@ Scenario_KS_Mixture = function(n1=500,n2=500){
 
 Scenario_KS_Normal = function(n1=500,n2=500){
   y = c(rep(0,n1),rep(1,n2))
-  x = 0.075 * y + rnorm(n1+n2)
+  x = 0.12 * y + rnorm(n1+n2)
   return(list(x=x,y=y))
 }
 
 
-Scenario_KS_Normal_Contaminated = function(n1=500,n2=500,contamination = 0.3){
+Scenario_KS_Normal_Mixture_2_Components = function(n1=500,n2=500,contamination = 0.6){
   y = c(rep(0,n1),rep(1,n2))
   u = sample(c(0,1),size = n1+n2,prob = c(1-contamination,contamination),replace = T)
-  x = (1-u) *(0.15 * y + rnorm(n1+n2)) + u * (rnorm(n1+n2,sd = 8))
+  x = (1-u) *(0.35 * y + rnorm(n1+n2)) + u * (rnorm(n1+n2,sd = 8))
   return(list(x=x,y=y))
 }
 
-Scenario_list = list(Scenario_KS_Normal,Scenario_KS_Normal_Contaminated,Scenario_KS_Mixture)
-Scenario_names = c('Normal, Shift', 'Normal, Shift with Contamination', 'Mixture, 3 Components')
+Scenario_list = list(Scenario_KS_Normal,Scenario_KS_Normal_Mixture_2_Components,Scenario_KS_Mixture)
+Scenario_names = c('Normal, Shift', 'Mixture, 2 Components', 'Mixture, 3 Components')
 
 #Subsection B: Declarations
 
@@ -51,37 +51,37 @@ POWER_REPETITIONS = 2000 #Number of realizations for power evaluation
 PERMUTATIONS_FOR_TEST = NULL_TABLE_SIZE #Number of permutations for tests that require permutations
 MMAX_FOR_KS = 10
 alpha = 0.05
-N1=N2 = 2500
+N1=N2 = 1000
 N = N1+N2
+BENCHMARK_REPETITION = 100
 
 #MODES:
-MODE_SUBSECTION_KS_C_PLOT_SETTINGS = FALSE
-MODE_SUBSECTION_KS_D_GENERATE_NULL_TABLES = FALSE
-MODE_SUBSECTION_KS_E_MEASURE_TIMES = FALSE
+MODE_SUBSECTION_KS_C_PLOT_SETTINGS = TRUE
+MODE_SUBSECTION_KS_D_GENERATE_NULL_TABLES = TRUE
+MODE_SUBSECTION_KS_E_MEASURE_TIMES = TRUE
 MODE_SUBSECTION_KS_F_RUN_SCENARIOS = TRUE
 MODE_SUBSECTION_KS_G_ANALYZE_RESULTS = TRUE
 
 #Subsection C: Plot Settings 
 
 if(MODE_SUBSECTION_KS_C_PLOT_SETTINGS){
-  PLOT_TO_FILE = T
-  if(PLOT_TO_FILE){
-    pdf('TwoSample-Settings.pdf',height = 6)
-  }
-  
   plot_data = Scenario_KS_Normal(10^6,10^6) #sample 2*10^6 points
   dt_gg_normal = data.frame(X = plot_data$x,Group = factor(plot_data$y,labels = c('Group 1','Group 2')),Setting = Scenario_names[1])
-  plot_data = Scenario_KS_Normal_Contaminated(10^6,10^6) #sample 2*10^6 points
+  plot_data = Scenario_KS_Normal_Mixture_2_Components(10^6,10^6) #sample 2*10^6 points
   dt_gg_normalcont = data.frame(X = plot_data$x,Group = factor(plot_data$y,labels = c('Group 1','Group 2')),Setting = Scenario_names[2])
   plot_data = Scenario_KS_Mixture(10^6,10^6) #sample 2*10^6 points
   dt_gg_mixture = data.frame(X = plot_data$x,Group = factor(plot_data$y,labels = c('Group 1','Group 2')),Setting = Scenario_names[3])
   dt_gg = rbind(dt_gg_normal,dt_gg_normalcont,dt_gg_mixture)
-  x_plot_min = -7.5
-  x_plot_max = 7.5
-  dt_gg = dt_gg[dt_gg$X >= x_plot_min & dt_gg$X <= x_plot_max,]
-  ggplot(dt_gg) +  geom_density(aes(X, fill = Group, colour = Group),alpha = 0.1,trim = TRUE) + theme_classic() + facet_wrap(~Setting,nrow = 3,ncol = 1) +xlim(c(-7.5,7.5))
+  #x_plot_min = -10
+  #x_plot_max = 7.5
+  #dt_gg = dt_gg[dt_gg$X >= x_plot_min & dt_gg$X <= x_plot_max,]
   
-  
+  PLOT_TO_FILE = T
+  if(PLOT_TO_FILE){
+    pdf('TwoSample-Settings.pdf',height = 2.7,width = 8)
+  }
+ 
+  ggplot(dt_gg) +  geom_density(aes(X, fill = Group, colour = Group),alpha = 0.1,trim = TRUE,lwd = 0.2) + theme_classic() + facet_wrap(~Setting,nrow = 1,ncol = 3) +xlim(c(-10,10))
   
   if(PLOT_TO_FILE){
     dev.off() 
@@ -93,11 +93,12 @@ if(MODE_SUBSECTION_KS_D_GENERATE_NULL_TABLES){
   set.seed(1)
   
   null_tables = list()
+  null_tables[[1]] = HHG::hhg.univariate.ks.nulltable(c(N1,N2),variant = 'KSample-Equipartition', nr.atoms = 25,mmax = MMAX_FOR_KS, nr.replicates = NULL_TABLE_SIZE)
+  null_tables[[2]] = HHG::hhg.univariate.ks.nulltable(c(N1,N2),variant = 'KSample-Equipartition', nr.atoms = 50,mmax = MMAX_FOR_KS, nr.replicates = NULL_TABLE_SIZE)
+  null_tables[[3]] = HHG::hhg.univariate.ks.nulltable(c(N1,N2),variant = 'KSample-Equipartition', nr.atoms = 100,mmax = MMAX_FOR_KS, nr.replicates = NULL_TABLE_SIZE)
+  null_tables[[4]] = HHG::hhg.univariate.ks.nulltable(c(N1,N2),variant = 'KSample-Equipartition', nr.atoms = 150,mmax = MMAX_FOR_KS, nr.replicates = NULL_TABLE_SIZE)
   
-  null_tables[[1]] = HHG::hhg.univariate.ks.nulltable(c(N1,N2),variant = 'KSample-Equipartition', nr.atoms = 50,mmax = MMAX_FOR_KS, nr.replicates = NULL_TABLE_SIZE)
-  null_tables[[2]] = HHG::hhg.univariate.ks.nulltable(c(N1,N2),variant = 'KSample-Equipartition', nr.atoms = 100,mmax = MMAX_FOR_KS, nr.replicates = NULL_TABLE_SIZE)
-  
-  names(null_tables) = c('Sm, 50 Atoms', 'Sm, 100 Atoms' )
+  names(null_tables) = c('Sm 25 Atoms','Sm 50 Atoms', 'Sm 100 Atoms','Sm 150 Atoms')
   save(null_tables,file = 'KS_NULL_TABLES.RData')
 }
 
@@ -109,36 +110,46 @@ if(MODE_SUBSECTION_KS_E_MEASURE_TIMES){
   data = Scenario_KS_Mixture(N1,N2)
   
   microbenchmark_wrapper_Sm = function(n_atoms){
-    res = HHG::hhg.univariate.ks.combined.test(data$x,data$y,variant = 'KSample-Equipartition',nr.atoms = n_atoms,mmax = MMAX_FOR_KS,nr.perm = 1000)
+    res = HHG::hhg.univariate.ks.combined.test(data$x,data$y,variant = 'KSample-Equipartition',nr.atoms = n_atoms,mmax = MMAX_FOR_KS,nr.perm = NULL_TABLE_SIZE)
   }
   
   microbenchmark_wrapper_KMMD = function(){
     kmmd_res = kernlab::kmmd(matrix(data$x[1:N1],ncol = 1)
-                             ,matrix(data$x[(N1+1):N],ncol = 1),asymptotic = FALSE,ntimes = PERMUTATIONS_FOR_TEST)
+                             ,matrix(data$x[(N1+1):N],ncol = 1),asymptotic = TRUE,ntimes = PERMUTATIONS_FOR_TEST)
   }
   
   microbenchmark_wrapper_ENERGY = function(){
     energy_res = energy::eqdist.etest(data$x,sizes = c(N1,N2),distance = FALSE,R=PERMUTATIONS_FOR_TEST)
   }
   
-  MICROBENCHMARK_REPETITION = 100
-  
-  mcb_Sm_50 = rbenchmark::benchmark(microbenchmark_wrapper_Sm(50),replications = MICROBENCHMARK_REPETITION)
-  mcb_Sm_100 = rbenchmark::benchmark(microbenchmark_wrapper_Sm(100),replications = MICROBENCHMARK_REPETITION)
-  mcb_ENERGY = rbenchmark::benchmark(microbenchmark_wrapper_ENERGY(),replications = MICROBENCHMARK_REPETITION)
-  mcb_KMMD = rbenchmark::benchmark(microbenchmark_wrapper_KMMD(),replications = MICROBENCHMARK_REPETITION)
+  print('Measuring times for Sm - 25 Atoms')
+  mcb_Sm_25 = rbenchmark::benchmark(microbenchmark_wrapper_Sm(25),replications = BENCHMARK_REPETITION)
+  print('Measuring times for Sm - 50 Atoms')
+  mcb_Sm_50 = rbenchmark::benchmark(microbenchmark_wrapper_Sm(50),replications = BENCHMARK_REPETITION)
+  print('Measuring times for Sm - 100 Atoms')
+  mcb_Sm_100 = rbenchmark::benchmark(microbenchmark_wrapper_Sm(100),replications = BENCHMARK_REPETITION)
+  print('Measuring times for Sm - 150 Atoms')
+  mcb_Sm_150 = rbenchmark::benchmark(microbenchmark_wrapper_Sm(150),replications = BENCHMARK_REPETITION)
+  print('Measuring times for Energy')
+  mcb_ENERGY = rbenchmark::benchmark(microbenchmark_wrapper_ENERGY(),replications = BENCHMARK_REPETITION)
+  print('Measuring times for kmmd')
+  mcb_KMMD = rbenchmark::benchmark(microbenchmark_wrapper_KMMD(),replications = BENCHMARK_REPETITION)
   
   run_times = c(
-    Sm_50 = mcb_Sm_50$elapsed/MICROBENCHMARK_REPETITION,
-    Sm_100 = mcb_Sm_100$elapsed/MICROBENCHMARK_REPETITION,
-    ENERGY = mcb_ENERGY$elapsed/MICROBENCHMARK_REPETITION,
-    KMMD = mcb_KMMD$elapsed/MICROBENCHMARK_REPETITION
+    Sm_25 = mcb_Sm_25$elapsed/BENCHMARK_REPETITION,
+    Sm_50 = mcb_Sm_50$elapsed/BENCHMARK_REPETITION,
+    Sm_100 = mcb_Sm_100$elapsed/BENCHMARK_REPETITION,
+    Sm_150 = mcb_Sm_150$elapsed/BENCHMARK_REPETITION,
+    ENERGY = mcb_ENERGY$elapsed/BENCHMARK_REPETITION,
+    KMMD = mcb_KMMD$elapsed/BENCHMARK_REPETITION
   )
   
   run_times
   save(run_times,file = 'SIMULATION_RUN_TIMES_KS.RData')
   
 }
+
+
 #Subsection F: Run Scenarios
 if(MODE_SUBSECTION_KS_F_RUN_SCENARIOS){
   
@@ -168,11 +179,11 @@ if(MODE_SUBSECTION_KS_F_RUN_SCENARIOS){
       }
 
       energy_res = energy::eqdist.etest(x,sizes = c(N1,N2),distance = FALSE,R=PERMUTATIONS_FOR_TEST)
-      results[1,4] = results[1,4] + 1 *( energy_res$p.value<=alpha)
+      results[1,length(result_names)-1] = results[1,length(result_names)-1] + 1 *( energy_res$p.value<=alpha)
       
       kmmd_res = kernlab::kmmd(matrix(x[y==0],ncol = 1)
-                               ,matrix(x[y==1],ncol = 1),asymptotic = FALSE,ntimes = PERMUTATIONS_FOR_TEST)
-      results[1,5] = results[1,5] + 1 *( kmmd_res@H0)
+                               ,matrix(x[y==1],ncol = 1),asymptotic = TRUE,ntimes = PERMUTATIONS_FOR_TEST)
+      results[1,length(result_names)] = results[1,length(result_names)] + 1 *( kmmd_res@AsympH0)
     }
     return(results)
   }
@@ -203,7 +214,7 @@ if(MODE_SUBSECTION_KS_G_ANALYZE_RESULTS){
   load(file = 'KS_Power_Results.RData') # => Power_results
   load(file = 'SIMULATION_RUN_TIMES_KS.RData') #=> run_times
   
-  colnames(Power_results) = c("REPS","Sm, 50 Atoms", "Sm, 100 Atoms","ENERGY","KMMD" )
+  colnames(Power_results) = c("REPS","25 Atoms","50 Atoms", "100 Atoms","150 Atoms","ENERGY","KMMD" )
   #run_times
   power_res_plot = data.frame(Test = NA, Scenario = NA, RunTime = NA, Power = NA)
   current_row = 1
