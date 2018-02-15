@@ -126,28 +126,55 @@ datagenCircles = function(n, m = n) {
 }  
 
 
-Scenario_list = list(datagenLine,datagenExp2x,datagenCircles,datagenSine)
+Scenario_list = list(
+  function(N)datagenLine,datagenExp2x,datagenCircles,datagenSine)
 Scenario_names = c('Line','Exp2x','Circles','Sine')
 
 #Subsection B: Declarations
 
 NR_SCENARIOS = length(Scenario_list)
-N = 2500 #Sample Size for simulation
-NULL_TABLE_SIZE = 1000
-POWER_REPETITIONS = 2000 #Number of realizations for power evaluation
+N_vec = c(500,1000,1500,2000,2500)
+N_max = max(N_vec)
+NULL_TABLE_SIZE = 50 #1000
+POWER_REPETITIONS = 39 #2000 #Number of realizations for power evaluation
 PERMUTATIONS_FOR_TEST = NULL_TABLE_SIZE #Number of permutations for tests that require permutations
-MMAX = 8
+MMAX = 10
 alpha = 0.05
+RBENCHMARK_REPETITION = 1 #100
 
 #MODES:
-MODE_SUBSECTION_C_PLOT_SETTINGS = FALSE
-MODE_SUBSECTION_D_MEASURE_TIMES = FALSE
+MODE_SUBSECTION_C_PLOT_SETTINGS = TRUE
+MODE_SUBSECTION_D_MEASURE_TIMES = TRUE
 MODE_SUBSECTION_E_MIC_NULL_TABLE = TRUE
 MODE_SUBSECTION_F_GENERATE_NULL_TABLES = TRUE
 MODE_SUBSECTION_G_RUN_SCENARIOS = TRUE
 MODE_SUBSECTION_H_ANALYZE_RESULTS = TRUE
 
+#functions for filenames:
 
+#function for time measurements by N:
+get_filename_timemeasurements = function(N){
+  return(paste0('SIMULATION_RUN_TIMES_N_',N,'.RData'))
+}
+
+#function for MIC table by N:
+get_filename_MIC_Threshold = function(N){
+  return(paste0('MIC_THRESHOLD_VALUE_N_',N,'.RData'))
+}
+
+#function for ADP Null Tables by N:
+get_filename_ADP_Null_Tables = function(N){
+  return(paste0('NULL_TABLES_N_',N,'.RData'))
+}
+
+#function for results_filename
+get_filename_Power_Results = function(N){
+  return(paste0('Ind_Power_Results_N_',N,'.RData'))
+}
+
+get_filename_Power_Results_Graph = function(N){
+  return(paste0('IndPowerResults_N_',N,'.PDF'))
+}
 
 #Subsection C: Plot Settings
 if(MODE_SUBSECTION_C_PLOT_SETTINGS){
@@ -155,12 +182,13 @@ if(MODE_SUBSECTION_C_PLOT_SETTINGS){
   n.plot = 5000
   plts = list()
   for (i in 1:NR_SCENARIOS) {
+    current_N = N_vec[length(N_vec)]
     dat = data.frame(t(Scenario_list[[i]](n.plot, 0)))
     names(dat) = c('x', 'y')
-    dat.noisy = data.frame(t(Scenario_list[[i]](N)))
+    dat.noisy = data.frame(t(Scenario_list[[i]](current_N)))
     names(dat.noisy) = c('x', 'y')
     dat = rbind(cbind(dat, grp = 'clean'),cbind(dat.noisy, grp = 'noisy'))
-    dat = dat[c((1:N)+n.plot,1:n.plot),]
+    dat = dat[c((1:current_N)+n.plot,1:n.plot),]
     plts[[i]] = ggplot(data = dat) + 
       geom_point(aes(x = x, y = y, colour = as.factor(grp), size = grp)) + #, alpha = 0.8
       theme_minimal(base_size = 10) + 
@@ -197,11 +225,16 @@ if(MODE_SUBSECTION_C_PLOT_SETTINGS){
   dev.off()
 }
 
+
 #Subsection D: Time Measurements & Constants (e.g. MIC Threshold value)
 if(MODE_SUBSECTION_D_MEASURE_TIMES){
+  for(current_N_index in 1:length(N_vec)){
+    current_N = N_vec[current_N_index]
+    print(paste0('Measuring times for N: ',current_N))
+    
     set.seed(1)
-    x = rnorm(N)
-    y = x + rnorm(N)
+    x = rnorm(current_N)
+    y = x + rnorm(current_N)
     
     microbenchmark_wrapper_Fast_NA_15_ML = function(){
       res = Fast.independence.test(x,y,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 15)
@@ -227,6 +260,14 @@ if(MODE_SUBSECTION_D_MEASURE_TIMES){
       res = Fast.independence.test(x,y,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 45, variant = 'ADP-EQP')
     }
     
+    microbenchmark_wrapper_Fast_NA_60_ML = function(){
+      res = Fast.independence.test(x,y,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 60)
+    }
+    
+    microbenchmark_wrapper_Fast_NA_60_MM = function(){
+      res = Fast.independence.test(x,y,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 60, variant = 'ADP-EQP')
+    }
+    
     microbenchmark_wrapper_dcov = function(){
       res = energy::dcov.test(x,y,R = PERMUTATIONS_FOR_TEST)
     }
@@ -245,74 +286,96 @@ if(MODE_SUBSECTION_D_MEASURE_TIMES){
       #mic_pvalue 
     }
     
-    MICROBENCHMARK_REPETITION = 100
     
-    mcb_F15_ML = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_15_ML(),replications = MICROBENCHMARK_REPETITION)
-    mcb_F15_MM = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_15_MM(),replications = MICROBENCHMARK_REPETITION)
-    mcb_F30_ML = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_30_ML(),replications = MICROBENCHMARK_REPETITION)
-    mcb_F30_MM = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_30_MM(),replications = MICROBENCHMARK_REPETITION)
-    mcb_F45_ML = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_45_ML(),replications = MICROBENCHMARK_REPETITION)
-    mcb_F45_MM = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_45_MM(),replications = MICROBENCHMARK_REPETITION)
-    mcb_dcov = rbenchmark::benchmark(microbenchmark_wrapper_dcov(),replications = MICROBENCHMARK_REPETITION)
-    mcb_dHSIC = rbenchmark::benchmark(microbenchmark_wrapper_dHSIC(),replications = MICROBENCHMARK_REPETITION)
-    mcb_MIC = rbenchmark::benchmark(microbenchmark_wrapper_MIC(),replications = MICROBENCHMARK_REPETITION)
+    print('Measureing Time for 15 atoms')
+    mcb_F15_ML = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_15_ML(),replications = RBENCHMARK_REPETITION)
+    mcb_F15_MM = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_15_MM(),replications = RBENCHMARK_REPETITION)
+    print('Measureing Time for 30 atoms')
+    mcb_F30_ML = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_30_ML(),replications = RBENCHMARK_REPETITION)
+    mcb_F30_MM = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_30_MM(),replications = RBENCHMARK_REPETITION)
+    print('Measureing Time for 45 atoms')
+    mcb_F45_ML = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_45_ML(),replications = RBENCHMARK_REPETITION)
+    mcb_F45_MM = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_45_MM(),replications = RBENCHMARK_REPETITION)
+    print('Measureing Time for 60 atoms')
+    mcb_F60_ML = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_60_ML(),replications = RBENCHMARK_REPETITION)
+    mcb_F60_MM = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_60_MM(),replications = RBENCHMARK_REPETITION)
+    print('Measureing Time for dCOV')
+    mcb_dcov = rbenchmark::benchmark(microbenchmark_wrapper_dcov(),replications = RBENCHMARK_REPETITION)
+    print('Measureing Time for dHSIC')
+    mcb_dHSIC = rbenchmark::benchmark(microbenchmark_wrapper_dHSIC(),replications = RBENCHMARK_REPETITION)
+    print('Measureing Time for MIC')
+    mcb_MIC = rbenchmark::benchmark(microbenchmark_wrapper_MIC(),replications = RBENCHMARK_REPETITION)
     
     
     run_times = c(
-      ML_15Atoms = mcb_F15_ML$elapsed/MICROBENCHMARK_REPETITION,
-      MM_15Atoms = mcb_F15_MM$elapsed/MICROBENCHMARK_REPETITION,
-      ML_30Atoms = mcb_F30_ML$elapsed/MICROBENCHMARK_REPETITION,
-      MM_30Atoms = mcb_F30_MM$elapsed/MICROBENCHMARK_REPETITION,
-      ML_45Atoms = mcb_F45_ML$elapsed/MICROBENCHMARK_REPETITION,
-      MM_45Atoms = mcb_F45_MM$elapsed/MICROBENCHMARK_REPETITION,
-      dCOV = mcb_dcov$elapsed/MICROBENCHMARK_REPETITION,
-      dHSIC = mcb_dHSIC$elapsed/MICROBENCHMARK_REPETITION,
-      MIC = mcb_MIC$elapsed/MICROBENCHMARK_REPETITION * (NULL_TABLE_SIZE + 1)
+      ML_15Atoms = mcb_F15_ML$elapsed/RBENCHMARK_REPETITION,
+      MM_15Atoms = mcb_F15_MM$elapsed/RBENCHMARK_REPETITION,
+      ML_30Atoms = mcb_F30_ML$elapsed/RBENCHMARK_REPETITION,
+      MM_30Atoms = mcb_F30_MM$elapsed/RBENCHMARK_REPETITION,
+      ML_45Atoms = mcb_F45_ML$elapsed/RBENCHMARK_REPETITION,
+      MM_45Atoms = mcb_F45_MM$elapsed/RBENCHMARK_REPETITION,
+      ML_60Atoms = mcb_F60_ML$elapsed/RBENCHMARK_REPETITION,
+      MM_60Atoms = mcb_F60_MM$elapsed/RBENCHMARK_REPETITION,
+      dCOV = mcb_dcov$elapsed/RBENCHMARK_REPETITION,
+      dHSIC = mcb_dHSIC$elapsed/RBENCHMARK_REPETITION,
+      MIC = mcb_MIC$elapsed/RBENCHMARK_REPETITION * (NULL_TABLE_SIZE + 1)
     )
+    filename = get_filename_timemeasurements(current_N)
+    save(run_times,file = filename)
     
-    save(run_times,file = 'SIMULATION_RUN_TIMES.RData')
-    
+  }
 }
 
 
 if(MODE_SUBSECTION_E_MIC_NULL_TABLE){
-  
-  NR.WORKERS = NR_CORES
-  cl <- makeCluster(NR.WORKERS)
-  registerDoParallel(cl)
-  
-  
-  MIC_worker_function = function(){
+  for(current_N_i in 1:length(N_vec)){
+    current_N = N_vec[current_N_i]
+    print(paste0("MIC null table for N: ",current_N))
+    NR.WORKERS = NR_CORES
+    cl <- makeCluster(NR.WORKERS)
+    registerDoParallel(cl)
     
-    NR_REPS_PER_WORKER = ceiling(NULL_TABLE_SIZE/NR.WORKERS)
-    NULL_DIST = rep(NA,NR_REPS_PER_WORKER)
-    for(i in 1:NR_REPS_PER_WORKER){
-      NULL_DIST[i] = minerva::mine(1:N,sample(1:N))$MIC
+    
+    MIC_worker_function = function(){
+      
+      NR_REPS_PER_WORKER = ceiling(NULL_TABLE_SIZE/NR.WORKERS)
+      NULL_DIST = rep(NA,NR_REPS_PER_WORKER)
+      for(i in 1:NR_REPS_PER_WORKER){
+        NULL_DIST[i] = minerva::mine(1:current_N,sample(1:current_N))$MIC
+      }
+      return(NULL_DIST)
     }
-    return(NULL_DIST)
+    
+    MIC_null_dist_res <- foreach(i=1:NR.WORKERS, .options.RNG=1234) %dorng% { MIC_worker_function() }
+    MIC_null_dist_as_array = unlist(MIC_null_dist_res)
+    MIC_THRESHOLD_VALUE = as.numeric(quantile(MIC_null_dist_as_array,probs = 1-alpha))
+    filename_MIC = get_filename_MIC_Threshold(current_N)
+    save(MIC_THRESHOLD_VALUE,file = filename_MIC)
+    stopCluster(cl)
   }
   
-  MIC_null_dist_res <- foreach(i=1:NR.WORKERS, .options.RNG=1234) %dorng% { MIC_worker_function() }
-  MIC_null_dist_as_array = unlist(MIC_null_dist_res)
-  MIC_THRESHOLD_VALUE = as.numeric(quantile(MIC_null_dist_as_array,probs = 1-alpha))
-  save(MIC_THRESHOLD_VALUE,file = 'MIC_THRESHOLD_VALUE.RData')
-  stopCluster(cl)
 }
 
 if(MODE_SUBSECTION_F_GENERATE_NULL_TABLES){
-  
-    set.seed(1)
-    NULL_TABLES  = list()
-    NULL_TABLES[[1]] = Fast.independence.test.nulltable(N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 15)
-    NULL_TABLES[[2]] = Fast.independence.test.nulltable(N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 15, variant = 'ADP-EQP')
-    NULL_TABLES[[3]] = Fast.independence.test.nulltable(N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 30)
-    NULL_TABLES[[4]] = Fast.independence.test.nulltable(N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 30, variant = 'ADP-EQP')
-    NULL_TABLES[[5]] = Fast.independence.test.nulltable(N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 45)
-    NULL_TABLES[[6]] = Fast.independence.test.nulltable(N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 45, variant = 'ADP-EQP')
-    
-    PROPOSED_TESTS = c('ML_15ATOMS','MM_15ATOMS','ML_30ATOMS','MM_30ATOMS','ML_45ATOMS','MM_45ATOMS')
-    names(NULL_TABLES) = PROPOSED_TESTS
-    save(NULL_TABLES,file = 'NULL_TABLES.RData')     
+    for(current_N_i in 1:length(N_vec)){
+      current_N = N_vec[current_N_i]
+      print(paste0('Building Null Tables for N: ',current_N))
+      set.seed(1)
+      NULL_TABLES  = list()
+      NULL_TABLES[[1]] = Fast.independence.test.nulltable(current_N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 15)
+      NULL_TABLES[[2]] = Fast.independence.test.nulltable(current_N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 15, variant = 'ADP-EQP')
+      NULL_TABLES[[3]] = Fast.independence.test.nulltable(current_N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 30)
+      NULL_TABLES[[4]] = Fast.independence.test.nulltable(current_N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 30, variant = 'ADP-EQP')
+      NULL_TABLES[[5]] = Fast.independence.test.nulltable(current_N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 45)
+      NULL_TABLES[[6]] = Fast.independence.test.nulltable(current_N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 45, variant = 'ADP-EQP')
+      NULL_TABLES[[7]] = Fast.independence.test.nulltable(current_N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 60)
+      NULL_TABLES[[8]] = Fast.independence.test.nulltable(current_N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 60, variant = 'ADP-EQP')
+      
+      PROPOSED_TESTS = c('ML_15ATOMS','MM_15ATOMS','ML_30ATOMS','MM_30ATOMS','ML_45ATOMS','MM_45ATOMS','ML_60ATOMS','MM_60ATOMS')
+      names(NULL_TABLES) = PROPOSED_TESTS
+      filename = get_filename_ADP_Null_Tables(current_N)
+      save(NULL_TABLES,file = filename)
+    }
 }
 
 
@@ -321,22 +384,22 @@ if(MODE_SUBSECTION_G_RUN_SCENARIOS){
   
   Simulation_results = NULL
   
-  POWER_SIM_WORKER_FUNCTION = function(SCENARIO_ID){
+  POWER_SIM_WORKER_FUNCTION = function(SCENARIO_ID,sample_size_index){
     
     library(HHG)
     library(dHSIC)
     library(minerva)
     library(energy)
-    
-    load(file = 'MIC_THRESHOLD_VALUE.RData') #=> MIC_THRESHOLD_VALUE
-    load(file = 'NULL_TABLES.RData') #=> NULL_TABLES
+    current_N = N_vec[sample_size_index]
+    load(file = get_filename_MIC_Threshold(current_N)) #=> MIC_THRESHOLD_VALUE
+    load(file = get_filename_ADP_Null_Tables(current_N)) #=> NULL_TABLES
     
     NR_REPS_PER_WORKER = ceiling(POWER_REPETITIONS/NR.WORKERS)
     result_names = c('REPS',names(NULL_TABLES),'dCOV','dHSIC','MIC')
     results = matrix(0,nrow = 1,ncol = length(result_names))     
     colnames(results) = result_names
     for(i in 1:NR_REPS_PER_WORKER){
-      data = Scenario_list[[SCENARIO_ID]](N)
+      data = Scenario_list[[SCENARIO_ID]](current_N,N_vec[length(N_vec)])
       x = data[1,]
       y = data[2,]
       
@@ -359,55 +422,66 @@ if(MODE_SUBSECTION_G_RUN_SCENARIOS){
   }
   
   Scenarios_to_run = 1:NR_SCENARIOS
-  for(SCENARIO_ID_FOR_SIM  in Scenarios_to_run){
-    print(paste0('Running Scenario ID ',SCENARIO_ID_FOR_SIM))
-    NR.WORKERS = NR_CORES
-    cl <- makeCluster(NR.WORKERS)
-    registerDoParallel(cl)
-    SCENARIO_SIM_RESULTS <- foreach(i=1:NR.WORKERS, .options.RNG=1234,.combine = 'rbind') %dorng% { POWER_SIM_WORKER_FUNCTION(SCENARIO_ID_FOR_SIM) }
-    stopCluster(cl)
-    sim_results_as_row = apply(SCENARIO_SIM_RESULTS,2,sum)
-    save(sim_results_as_row,file = paste0('ind_sim_results_as_row_',SCENARIO_ID_FOR_SIM,'.RData'))
-    Simulation_results = rbind(Simulation_results,sim_results_as_row) 
-  }
   
-  Power_results = Simulation_results
-  for(i in 1:nrow(Power_results))
-    Power_results[i,] = Power_results[i,] / Power_results[i,1]
-  rownames(Power_results) = Scenario_names[Scenarios_to_run]
-  save(Power_results,file = paste0('Ind_Power_Results.RData'))
+  for(current_N_ind in 1:length(N_vec)){
+    Simulation_results = NULL
+    current_N = N_vec[current_N_ind]
+    for(SCENARIO_ID_FOR_SIM  in Scenarios_to_run){
+      print(paste0('Running Scenario ID ',SCENARIO_ID_FOR_SIM,' N index :',current_N_ind,' Sample size: ',current_N))
+      NR.WORKERS = NR_CORES
+      cl <- makeCluster(NR.WORKERS)
+      registerDoParallel(cl)
+      SCENARIO_SIM_RESULTS <- foreach(i=1:NR.WORKERS, .options.RNG=1234,.combine = 'rbind') %dorng% { POWER_SIM_WORKER_FUNCTION(SCENARIO_ID_FOR_SIM,current_N_ind) }
+      stopCluster(cl)
+      sim_results_as_row = apply(SCENARIO_SIM_RESULTS,2,sum)
+      save(sim_results_as_row,file = paste0('ind_sim_results_as_row_',SCENARIO_ID_FOR_SIM,'_N_',current_N,'.RData'))
+      Simulation_results = rbind(Simulation_results,sim_results_as_row) 
+    }
+    
+    Power_results = Simulation_results
+    for(i in 1:nrow(Power_results))
+      Power_results[i,] = Power_results[i,] / Power_results[i,1]
+    rownames(Power_results) = Scenario_names[Scenarios_to_run]
+    save(Power_results,file = get_filename_Power_Results(current_N))
+  }
 }
 
 #Subsection H: Analyze Results
 if(MODE_SUBSECTION_H_ANALYZE_RESULTS){
-  load(file = 'Ind_Power_Results.RData') # => Power_results
-  load(file = 'SIMULATION_RUN_TIMES.RData') #=> run_times
   
-  colnames(Power_results) = c("REPS","MXL, 15 Atoms", "MXM, 15 Atoms", "MXL, 30 Atoms", "MXM, 30 Atoms", "MXL, 45 Atoms", "MXM, 45 Atoms", "dCOV", "dHSIC" , "MIC" )
-  #run_times
-  power_res_plot = data.frame(Test = NA, Scenario = NA, RunTime = NA, Power = NA)
-  current_row = 1
-  for(i in 1:nrow(Power_results)){
-    for(j in 2:ncol(Power_results)){
-      current_test = colnames(Power_results)[j]
-      current_scenario = rownames(Power_results)[i]
-      current_power = Power_results[i,j]
-      current_Runtime = run_times[j-1]
-      power_res_plot[current_row,] = c(current_test,current_scenario,current_Runtime,current_power)
-      current_row = current_row + 1
+  for(current_N_index in 1:length(N_vec)){
+    current_N = N_vec[current_N_index]
+    
+    load(file = get_filename_Power_Results(current_N)) # => Power_results
+    load(file = get_filename_timemeasurements(current_N)) #=> run_times
+    
+    colnames(Power_results) = c("REPS","mXl, 15 Atoms", "mXm, 15 Atoms", "mXl, 30 Atoms", "mXm, 30 Atoms", "mXl, 45 Atoms", "mXm, 45 Atoms", "mXl, 60 Atoms", "mXm, 60 Atoms", "dCOV", "dHSIC" , "MIC" )
+    #run_times
+    power_res_plot = data.frame(Test = NA, Scenario = NA, RunTime = NA, Power = NA)
+    current_row = 1
+    for(i in 1:nrow(Power_results)){
+      for(j in 2:ncol(Power_results)){
+        current_test = colnames(Power_results)[j]
+        current_scenario = rownames(Power_results)[i]
+        current_power = Power_results[i,j]
+        current_Runtime = run_times[j-1]
+        power_res_plot[current_row,] = c(current_test,current_scenario,current_Runtime,current_power)
+        current_row = current_row + 1
+      }
     }
+    power_res_plot$RunTime = as.numeric(power_res_plot$RunTime)
+    power_res_plot$Power = as.numeric(power_res_plot$Power)
+    power_res_plot$Scenario = factor(power_res_plot$Scenario ,levels = c('Line','Exp2x','Circles','Sine'))
+    Test_names_vec = colnames(Power_results)[c(10,11,12,2,4,6,8,3,5,7,9)]
+    
+    pdf(get_filename_Power_Results_Graph(current_N), width = 8, height = 3)
+    
+    print(ggplot(power_res_plot) + geom_point(aes(x = log(RunTime) , y = Power ,shape = Test,color = Test))+facet_wrap(~Scenario,nrow = 1,ncol = 4) +
+      scale_color_manual(breaks = Test_names_vec,values = c(1,1,1,2,3,4,1,2,3,4,1)) +
+      scale_shape_manual(breaks = Test_names_vec,values = c(0,1,2,16,16,16,16,17,17,17,17)) +
+      xlab("log(RunTime[Seconds])") + ylim(c(0,1)) + theme_bw())
+    
+    dev.off()
   }
-  power_res_plot$RunTime = as.numeric(power_res_plot$RunTime)
-  power_res_plot$Power = as.numeric(power_res_plot$Power)
-  power_res_plot$Scenario = factor(power_res_plot$Scenario ,levels = c('Line','Exp2x','Circles','Sine'))
-  Test_names_vec = colnames(Power_results)[c(8,9,10,2,4,6,3,5,7)]
-  
-  pdf('IndPowerResults.PDF', width = 8, height = 3)
-  
-  ggplot(power_res_plot) + geom_point(aes(x = log(RunTime) , y = Power ,shape = Test,color = Test))+facet_wrap(~Scenario,nrow = 1,ncol = 4) +
-    scale_color_manual(breaks = Test_names_vec,values = c(1,1,1,2,3,4,2,3,4)) +
-    scale_shape_manual(breaks = Test_names_vec,values = c(0,1,2,16,16,16,17,17,17)) +
-    xlab("log(RunTime[Seconds])") + ylim(c(0,1)) + theme_bw()
-  
-  dev.off()
+ 
 }
