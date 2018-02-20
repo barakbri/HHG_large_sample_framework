@@ -126,29 +126,28 @@ datagenCircles = function(n, m = n) {
 }  
 
 
-Scenario_list = list(
-  function(N)datagenLine,datagenExp2x,datagenCircles,datagenSine)
+Scenario_list = list(datagenLine,datagenExp2x,datagenCircles,datagenSine)
 Scenario_names = c('Line','Exp2x','Circles','Sine')
 
 #Subsection B: Declarations
 
 NR_SCENARIOS = length(Scenario_list)
 N_vec = c(500,1000,1500,2000,2500)
-N_max = max(N_vec)
-NULL_TABLE_SIZE = 50 #1000
-POWER_REPETITIONS = 39 #2000 #Number of realizations for power evaluation
+NULL_TABLE_SIZE = 1000
+POWER_REPETITIONS = 2000 #Number of realizations for power evaluation
 PERMUTATIONS_FOR_TEST = NULL_TABLE_SIZE #Number of permutations for tests that require permutations
 MMAX = 10
 alpha = 0.05
-RBENCHMARK_REPETITION = 1 #100
+RBENCHMARK_REPETITION = 100
 
 #MODES:
 MODE_SUBSECTION_C_PLOT_SETTINGS = TRUE
-MODE_SUBSECTION_D_MEASURE_TIMES = TRUE
-MODE_SUBSECTION_E_MIC_NULL_TABLE = TRUE
-MODE_SUBSECTION_F_GENERATE_NULL_TABLES = TRUE
-MODE_SUBSECTION_G_RUN_SCENARIOS = TRUE
+MODE_SUBSECTION_D_MEASURE_TIMES = FALSE
+MODE_SUBSECTION_E_MIC_NULL_TABLE = FALSE
+MODE_SUBSECTION_F_GENERATE_NULL_TABLES = FALSE
+MODE_SUBSECTION_G_RUN_SCENARIOS = FALSE
 MODE_SUBSECTION_H_ANALYZE_RESULTS = TRUE
+MODE_SUBSECTION_I_PLOT_POWER_BY_N = TRUE
 
 #functions for filenames:
 
@@ -484,4 +483,37 @@ if(MODE_SUBSECTION_H_ANALYZE_RESULTS){
     dev.off()
   }
  
+}
+
+if(MODE_SUBSECTION_I_PLOT_POWER_BY_N){
+  cols_ind_to_graph = c(6,10,11,12)
+  power_list = list()
+  for(current_N_ind in 1:length(N_vec)){
+    current_N = N_vec[current_N_ind]  
+    load(file = get_filename_Power_Results(current_N)) # => Power_results
+    power_list[[current_N_ind]] = Power_results
+  }
+  power_matrix = data.frame(N = NA,Test = NA, Power = NA,Scenario = NA)
+  test_names = c("mxl, 45 Atoms", "dCOV","dHSIC","MIC" )
+  power_matrix_pointer = 1
+  for(i in 1:length(power_list)){
+    for(j in 1:length(cols_ind_to_graph)){
+      for(Scenario_ID in 1:length(Scenario_names)){
+        power_matrix[power_matrix_pointer , ] = c(N_vec[i],test_names[j],power_list[[i]][Scenario_ID, cols_ind_to_graph[j]],Scenario_names[Scenario_ID])
+        power_matrix_pointer = power_matrix_pointer + 1
+      }
+    }
+  }
+  power_matrix$N = as.numeric(power_matrix$N)
+  power_matrix$Power = as.numeric(power_matrix$Power)
+  power_matrix$Scenario = factor(power_matrix$Scenario,levels = Scenario_names)
+  
+  
+  pdf("IndPower_by_N.pdf", width = 8, height = 2.5)
+  
+  ggplot(data = power_matrix,mapping = aes(x= N,y = Power,color = Test)) +geom_point()+geom_line() +
+    facet_wrap(~Scenario,nrow =1, ncol = 4) + ylim(c(0,1)) +  theme_bw() +
+    theme(axis.text.x = element_text(size = 6),axis.text.y = element_text(size = 6)) 
+  
+  dev.off()
 }
