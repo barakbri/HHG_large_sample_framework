@@ -1,19 +1,27 @@
 # This file contains the code for the paper by Brill, Heller, Heller
-# 2017-10-17
+# This file is the main index file, it is used to run all other files. 
+# See the flags section below, on what each part of the code base does
+# date 2018-02-22
 # flags for running the different sections
 
+#################
 # flags:
-PART_1_USAGE_EXAMPLES = T #Independence tests usage cases and plots (Batman)
-PART_2_KSAMPLE_USAGE_EXAMPLES = T #K-Sample tests usage cases and plots 
-PART_3_TIME_MEASUREMENTS = T #(including graph)
-PART_4_PLOT_ADP_BOARD = T #Create the demo plot for the methods section
+#################
+PART_1_USAGE_EXAMPLES = TRUE #Independence tests usage cases and plots. This is the example used to create the example output.
+PART_2_KSAMPLE_USAGE_EXAMPLES = TRUE #K-Sample tests usage cases and plots  . This was used to create the example for the K-Sample test.
+PART_3_PLOT_ADP_BOARD = TRUE #Create the demo plot for the methods section.
 
-#install the latest package from CRAN
-#install.packages('HHG')
+PART_4_INDEPENDENCE_TESTING_SIMULATION = TRUE # Simualtion for comparing running times and power to competitors, over scenarios.
+PART_5_KSAMPLE_TESTING_SIMULATION = TRUE # Simulation for comparing running times and power to competitors, over K-sample scenarios
+PART_6_RUNNING_TIME_SIMULATION = TRUE #simulation for running times for different N and N.Atoms
+PART_7_SMALL_N_INDEPENDENCE_SIMULATION = TRUE #Testing power for small N
 
 #set the working directory
-#setwd('c:/PHD_docs/Atoms_paper/R_Code/')
+#setwd('~')
+# it is assumed that all source files are in the same directory. Plots and results will be saved to the same directory.
+# The GitHub repository saves this directory, with all results and graphs.
 
+#Load packages required
 library(HHG)
 library(energy)
 library(dHSIC)
@@ -21,7 +29,11 @@ library(minerva)
 library(ggplot2)
 library(kernlab)
 
+# This part shows the usage examples for independence testing
 if(PART_1_USAGE_EXAMPLES){
+  
+  #first we generate data, by noising data, from a known curve
+  
   set.seed(1)
   require(ggplot2)
   #Code for the Batman curve taken from:
@@ -103,10 +115,10 @@ if(PART_1_USAGE_EXAMPLES){
    dev.off() 
   }
   
-  #generate null table
+  #generate null table, using base paramters, m.max = 10, nr.atoms = 40.
   nt                      = Fast.independence.test.nulltable(n)
   
-  #run test
+  #run test, using null table
   res = Fast.independence.test(x,y,nt)
   res$MinP.pvalue #0.009950249
   
@@ -133,12 +145,8 @@ if(PART_1_USAGE_EXAMPLES){
   
 }
 
+#Usagee examples for the KSample case
 if(PART_2_KSAMPLE_USAGE_EXAMPLES){
-  
-  library(energy)
-  library(HHG)
-  library(ggplot2)
-  library(kernlab)
   
   set.seed(1)
   
@@ -175,13 +183,13 @@ if(PART_2_KSAMPLE_USAGE_EXAMPLES){
   X = test_data$x
   Y = test_data$y
   #generate null table
-  nt = hhg.univariate.ks.nulltable(c(500,500),
-                                   variant = 'KSample-Equipartition',
-                                   mmax = 10,
-                                   nr.atoms = 30,
-                                   nr.replicates = 10^4)
+  nt = hhg.univariate.ks.nulltable(c(500,500), # This is the sample size
+                                   variant = "KSample-Equipartition", #there are two variants: "KSample-Variant" for small data samples and 'KSample-Equipartition' for large data samples
+                                   mmax = 10, # parameter for m.max
+                                   nr.atoms = 30, #number of atoms
+                                   nr.replicates = 10^4) #number of replicates in tables. This gives the minimum P-value attainable by the permutation test
   
-  #run test
+  #run test - parameters are taken from the null table
   res = hhg.univariate.ks.combined.test(X,Y,nt)  
   res
   res$MinP.pvalue #0.0065
@@ -208,63 +216,18 @@ if(PART_2_KSAMPLE_USAGE_EXAMPLES){
   
 }
 
-if(PART_3_TIME_MEASUREMENTS){
-  #we measure times for ADP in this section
-  set.seed(1)
-  #nr atoms, in a lattice for simulation
-  atoms_ind= c(10:30)*10
-  #measured times
-  time_ind_m_10 = rep(NA,length(atoms_ind))
-  time_ind_m_15 = rep(NA,length(atoms_ind))
-  
-  #number of repetitions per setting
-  nr.reps=3
-  for(atoms_i in 1:length(atoms_ind)){
-    print(paste0('doing atoms_i: ',atoms_i ))
-    time = system.time(for(i in 1:nr.reps){HHG::hhg.univariate.ind.stat(1:300,sample(1:300),'ADP-EQP-ML',mmax = 10,nr.atoms = atoms_ind[atoms_i])})
-    time_ind_m_10[atoms_i] = time[3]/nr.reps
-    
-    time = system.time(for(i in 1:nr.reps){HHG::hhg.univariate.ind.stat(1:300,sample(1:300),'ADP-EQP-ML',mmax = 15,nr.atoms = atoms_ind[atoms_i])})
-    time_ind_m_15[atoms_i] = time[3]/nr.reps
-  }
-  
-  #save results and plot to file
-  time_results = list(time_ind_m_10 = time_ind_m_10,time_ind_m_15 = time_ind_m_15)
-  save(time_results,file = 'time_results.RData')
-  PLOT_TO_FILE = T
-  if(PLOT_TO_FILE){
-    pdf('RunningTimeComparison.pdf',
-        width     = 3.25,
-        height    = 3.25,
-        pointsize = 4
-        #units     = "in",
-        #res       = 1200,
-        #pointsize = 4)
-    )
-  }
-  plot(log(atoms_ind),log(time_ind_m_10),col='black',xlab='ln(Nr.Atoms)',ylab='ln(Time[Sec]/ 1[Sec])',pch='X',cex=0.8)
-  points(log(atoms_ind),log(time_ind_m_15),col='red',cex=1)
-  model_ind = lm(log(time_ind_m_10)~log(atoms_ind))
-  abline(model_ind$coefficients[1],model_ind$coefficients[2],col='black',lty=2,lwd=1)
-  model_ind_ml = lm(log(time_ind_m_15)~log(atoms_ind))
-  abline(model_ind_ml$coefficients[1],model_ind_ml$coefficients[2],col='red',lty=3,lwd=1)
-  ind_string = paste0('Linear fit, m.max = 10: ',round(model_ind$coefficients[1],2)," + x*",round(model_ind$coefficients[2],2),' ,R^2: ',round(summary(model_ind)$r.squared,6))
-  ind_string_ml = paste0('Linear fit, m.max=15: ',round(model_ind_ml$coefficients[1],2)," + x*",round(model_ind_ml$coefficients[2],2),' ,R^2: ',round(summary(model_ind_ml)$r.squared,6))
-  text(ind_string,x=4.9,y=4,col='black',cex=0.7)
-  text(ind_string_ml,x=4.9,y=3.5,col='red',cex=0.7)
-  if(PLOT_TO_FILE){
-    dev.off() 
-  }
-}
-
-if(PART_4_PLOT_ADP_BOARD){
+# This Section draws the ADP board for Section 2 of the paper. The code deals mainyl with graphics, colors and lines.
+# See the paper for full explanation regarding the plot.
+if(PART_3_PLOT_ADP_BOARD){
   #draw the ADP board, for the methods section
+  #sample data
   set.seed(1)
   N = 50
   
   x = (rnorm(N))
   y = rank(3*cos(2*pi*x) -1.5*x + rnorm(N))
   x = rank(x)
+  
   PLOT_TO_FILE = T
   if(PLOT_TO_FILE){
     pdf('Atoms_Scheme.pdf',width     = 5,
@@ -272,10 +235,12 @@ if(PART_4_PLOT_ADP_BOARD){
             pointsize = 2)
   }
   
+  #plot dots
   plot_cex = 1.3
   text_cex = 1
   plot(x,y,xaxt = 'n',yaxt='n',pch=16,cex=plot_cex,xlab='rank(x)',ylab = 'rank(y)')
   
+  #plots grid lines, for atoms, partition and selected cell
   axis(1, at = c(1,(1:20)*5), las=1)
   axis(2, at = c(1,(1:20)*5), las=2)
   Atom_locations = c(1:9)*5+0.5
@@ -323,3 +288,24 @@ if(PART_4_PLOT_ADP_BOARD){
   }
 }
 
+#This part deals with the power simulation for the tests of independence.
+# See comments in script.
+if(PART_4_INDEPENDENCE_TESTING_SIMULATION){
+  source('Power_Sim_Ind.R')
+}
+
+#This part deals with the power simulation for the tests of equality of distributions (K-sample).
+# See comments in script.
+if(PART_5_KSAMPLE_TESTING_SIMULATION){
+  source('Power_Sim_KS.R')
+}
+
+#Simulation script for measuring times by N, and by Nr.atoms
+if(PART_6_RUNNING_TIME_SIMULATION){
+  source('TimeMeasurements_Comparison_To_Other_Methods.R')
+}
+
+#Simulation script for testing power for small N.
+if(PART_7_SMALL_N_INDEPENDENCE_SIMULATION){
+  source('PowerSimulation_SmallN.R')
+}

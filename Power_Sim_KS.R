@@ -1,6 +1,7 @@
-setwd('~')
+# Script for K-sample simulation study for power
+# See brill-heller-heller.R for an index used for running all scripts.
 
-
+#setwd('~') #set in main script, disabled here
 
 library(kernlab)
 library(energy)
@@ -10,10 +11,22 @@ library(parallel)
 library(doParallel)
 library(foreach)
 library(doRNG)
-NR_CORES = detectCores() - 1 # currently set to 7, for reproducability
+NR_CORES = detectCores() - 1 # The simulation uses the maximum number of cores available.
+# For reproducability, please run on an Amazon C5.18XL machine with 72 cores.
+# On any machine with 72 cores (or by setting NR_CORES = 71), results would be reproducible with paper.
+# On an amazon C5 machine, run times will be reproducible as well.
+
 set.seed(1)
 
-#function for generating data
+#Subsection A: Functions for data generation
+#***********************
+# Here we define the scenarios for the simulation.
+#Each scenario has a parameter n, setting the sample size, and a parameter m, setting the noise level.
+#Several sample sizes have a default noise level.
+
+
+
+#mixture - 3 components
 Scenario_KS_Mixture = function(n1=500,n2=500){
   delta_1 = sample(x = c(-4,0,4),replace = T,size = n1)
   delta_2 = sample(x = c(-4,0,4),replace = T,size = n2)
@@ -26,13 +39,14 @@ Scenario_KS_Mixture = function(n1=500,n2=500){
   return(list(x=x,y=y))
 }
 
+#normals with shift, scenario
 Scenario_KS_Normal = function(n1=500,n2=500){
   y = c(rep(0,n1),rep(1,n2))
   x = 0.12 * y + rnorm(n1+n2)
   return(list(x=x,y=y))
 }
 
-
+#mixture, 2 components
 Scenario_KS_Normal_Mixture_2_Components = function(n1=500,n2=500,contamination = 0.6){
   y = c(rep(0,n1),rep(1,n2))
   u = sample(c(0,1),size = n1+n2,prob = c(1-contamination,contamination),replace = T)
@@ -44,7 +58,7 @@ Scenario_list = list(Scenario_KS_Normal,Scenario_KS_Normal_Mixture_2_Components,
 Scenario_names = c('Normal, Shift', 'Mixture, 2 Components', 'Mixture, 3 Components')
 
 #Subsection B: Declarations
-
+#***********************
 NR_SCENARIOS = length(Scenario_list)
 NULL_TABLE_SIZE = 1000
 POWER_REPETITIONS = 2000 #Number of realizations for power evaluation
@@ -63,7 +77,7 @@ MODE_SUBSECTION_KS_F_RUN_SCENARIOS = FALSE
 MODE_SUBSECTION_KS_G_ANALYZE_RESULTS = TRUE
 
 #Subsection C: Plot Settings 
-
+#***********************
 if(MODE_SUBSECTION_KS_C_PLOT_SETTINGS){
   plot_data = Scenario_KS_Normal(10^6,10^6) #sample 2*10^6 points
   dt_gg_normal = data.frame(X = plot_data$x,Group = factor(plot_data$y,labels = c('Group 1','Group 2')),Setting = Scenario_names[1])
@@ -89,6 +103,7 @@ if(MODE_SUBSECTION_KS_C_PLOT_SETTINGS){
 }
 
 #Subsection D: Generate NUll Tables
+#***********************
 if(MODE_SUBSECTION_KS_D_GENERATE_NULL_TABLES){
   set.seed(1)
   
@@ -104,6 +119,7 @@ if(MODE_SUBSECTION_KS_D_GENERATE_NULL_TABLES){
 
 
 #Subsection E: Measure Times
+#***********************
 if(MODE_SUBSECTION_KS_E_MEASURE_TIMES){
   
   set.seed(1)
@@ -151,6 +167,7 @@ if(MODE_SUBSECTION_KS_E_MEASURE_TIMES){
 
 
 #Subsection F: Run Scenarios
+#***********************
 if(MODE_SUBSECTION_KS_F_RUN_SCENARIOS){
   
   Simulation_results = NULL
@@ -210,6 +227,7 @@ if(MODE_SUBSECTION_KS_F_RUN_SCENARIOS){
 }
 
 #Subsection G: Analyze Results
+#***********************
 if(MODE_SUBSECTION_KS_G_ANALYZE_RESULTS){
   load(file = 'KS_Power_Results.RData') # => Power_results
   load(file = 'SIMULATION_RUN_TIMES_KS.RData') #=> run_times

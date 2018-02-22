@@ -1,7 +1,14 @@
-setwd('~')
-NR_CORES = detectCores() - 1 # currently set to 7, for reproducability
-#Power Simulation for independence settings
+# Power Simulation for independence settings 
+# See brill-heller-heller.R for an index used for running all scripts.
 
+#setwd('~') #set in main script, disabled here
+NR_CORES = detectCores() - 1 # The simulation uses the maximum number of cores available.
+# For reproducability, please run on an Amazon C5.18XL machine with 72 cores.
+# On any machine with 72 cores (or by setting NR_CORES = 71), results would be reproducible with paper.
+# On an amazon C5 machine, run times will be reproducible as well.
+
+
+#load libraries required
 library(ggplot2)
 library(grid)
 library(rbenchmark)
@@ -15,8 +22,12 @@ library(doParallel)
 library(foreach)
 library(doRNG)
 
-#Subsection A: Scenarios
 
+#Subsection A: Scenarios
+#***********************
+# Here we define the scenarios for the simulation.
+#Each scenario has a parameter n, setting the sample size, and a parameter m, setting the noise level.
+#Several sample sizes have a default noise level.
 
 
 # Linear
@@ -125,31 +136,33 @@ datagenCircles = function(n, m = n) {
   return (rbind(x, y))
 }  
 
-
+#This is a list of the scenarios, for iterating over them, along with their names
 Scenario_list = list(datagenLine,datagenExp2x,datagenCircles,datagenSine)
 Scenario_names = c('Line','Exp2x','Circles','Sine')
 
 #Subsection B: Declarations
+#***********************
 
-NR_SCENARIOS = length(Scenario_list)
-N_vec = c(500,1000,1500,2000,2500)
-NULL_TABLE_SIZE = 1000
-POWER_REPETITIONS = 2000 #Number of realizations for power evaluation
+NR_SCENARIOS = length(Scenario_list) # the number of scenarios in the simulation
+N_vec = c(500,1000,1500,2000,2500) #sample sizes for simulation. The noise level is set by the last one.
+NULL_TABLE_SIZE = 1000 # Size of null table for ADP and MIC tests
+POWER_REPETITIONS = 2000 #Number of realizations for power evaluation, 
 PERMUTATIONS_FOR_TEST = NULL_TABLE_SIZE #Number of permutations for tests that require permutations
-MMAX = 10
-alpha = 0.05
-RBENCHMARK_REPETITION = 100
+MMAX = 10 # parameter for m.max is set to be the package default
+alpha = 0.05 #requried type I error rate
+RBENCHMARK_REPETITION = 100 #number of repetitions, for evaluating time
 
 #MODES:
-MODE_SUBSECTION_C_PLOT_SETTINGS = TRUE
-MODE_SUBSECTION_D_MEASURE_TIMES = FALSE
-MODE_SUBSECTION_E_MIC_NULL_TABLE = FALSE
-MODE_SUBSECTION_F_GENERATE_NULL_TABLES = FALSE
-MODE_SUBSECTION_G_RUN_SCENARIOS = FALSE
-MODE_SUBSECTION_H_ANALYZE_RESULTS = TRUE
-MODE_SUBSECTION_I_PLOT_POWER_BY_N = TRUE
+MODE_SUBSECTION_C_PLOT_SETTINGS = TRUE # subsection used for plotting the settings to file
+MODE_SUBSECTION_D_MEASURE_TIMES = FALSE # subsection used for measuring times, for each of the tests
+MODE_SUBSECTION_E_MIC_NULL_TABLE = FALSE # subsection for computing the MIC critical value for rejection. (multiple cores)
+MODE_SUBSECTION_F_GENERATE_NULL_TABLES = FALSE #subsection for generating null tables for MinP ADP.
+MODE_SUBSECTION_G_RUN_SCENARIOS = FALSE # subsection for running the actual simulations. (multiple cores)
+MODE_SUBSECTION_H_ANALYZE_RESULTS = TRUE #subsection for plotting results, by N
+MODE_SUBSECTION_I_PLOT_POWER_BY_N = TRUE # subsection for plotting results, comparinig power over several N
 
 #functions for filenames:
+#these are used to access files, according to their sample sizes.
 
 #function for time measurements by N:
 get_filename_timemeasurements = function(N){
@@ -176,18 +189,21 @@ get_filename_Power_Results_Graph = function(N){
 }
 
 #Subsection C: Plot Settings
+#***********************
 if(MODE_SUBSECTION_C_PLOT_SETTINGS){
   set.seed(1)
-  n.plot = 5000
+  n.plot = 5000 #number of points used to plot the noiseless curve
   plts = list()
   for (i in 1:NR_SCENARIOS) {
-    current_N = N_vec[length(N_vec)]
+    current_N = N_vec[length(N_vec)] #generate data with no noise
     dat = data.frame(t(Scenario_list[[i]](n.plot, 0)))
     names(dat) = c('x', 'y')
-    dat.noisy = data.frame(t(Scenario_list[[i]](current_N)))
+    dat.noisy = data.frame(t(Scenario_list[[i]](current_N))) #generate data with nois
     names(dat.noisy) = c('x', 'y')
+    #combine the datasets
     dat = rbind(cbind(dat, grp = 'clean'),cbind(dat.noisy, grp = 'noisy'))
     dat = dat[c((1:current_N)+n.plot,1:n.plot),]
+    #plot both datasets, in different colors
     plts[[i]] = ggplot(data = dat) + 
       geom_point(aes(x = x, y = y, colour = as.factor(grp), size = grp)) + #, alpha = 0.8
       theme_minimal(base_size = 10) + 
@@ -196,6 +212,7 @@ if(MODE_SUBSECTION_C_PLOT_SETTINGS){
     scale_size_discrete(range = c(1, 2), guide = 'none')
   }
   
+  # plot to file, over a grid
   pdf('IndScenarios.PDF', width = 8, height = 2.2)
   
   grid.newpage()
@@ -226,14 +243,20 @@ if(MODE_SUBSECTION_C_PLOT_SETTINGS){
 
 
 #Subsection D: Time Measurements & Constants (e.g. MIC Threshold value)
+#***********************
 if(MODE_SUBSECTION_D_MEASURE_TIMES){
+  #we measure times for each of the sample sizes
   for(current_N_index in 1:length(N_vec)){
     current_N = N_vec[current_N_index]
     print(paste0('Measuring times for N: ',current_N))
     
+    #generate data
     set.seed(1)
     x = rnorm(current_N)
     y = x + rnorm(current_N)
+    
+    #wrappers for ADP/MinP, with all steps included - null table generation, statistic computation, from start to end.
+    #wrappers include 15,30,45,60 atoms, for mXl and mXm variants.
     
     microbenchmark_wrapper_Fast_NA_15_ML = function(){
       res = Fast.independence.test(x,y,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 15)
@@ -267,17 +290,21 @@ if(MODE_SUBSECTION_D_MEASURE_TIMES){
       res = Fast.independence.test(x,y,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 60, variant = 'ADP-EQP')
     }
     
+    #wrapper for measuring time, for dCov
     microbenchmark_wrapper_dcov = function(){
       res = energy::dcov.test(x,y,R = PERMUTATIONS_FOR_TEST)
     }
     
+    #wrapper for measuring time, for dHSIC
     microbenchmark_wrapper_dHSIC = function(){
       res = dHSIC::dhsic.test(x, y, method="permutation", B = PERMUTATIONS_FOR_TEST)
     }
     
+    #wrapper for measurign time, for MIC
     microbenchmark_wrapper_MIC = function(){
       mic_res = minerva::mine(x,y)
-      #MIC if very time expensive for full 1000 permutation test and time repetitions. We will compute a single statistic and multiply time by 1001, to imitate a full null table.
+      #MIC is very time expensive for full 1000 permutation test and time repetitions.
+      #We will compute a single statistic and multiply time by 1001, to imitate a full null table.
       #mic_res = minerva::mine(x,y)
       #mine_permutations = rep(NA,1000)
       #for(b in 1:1000){print(b);mine_permutations[b] = minerva::mine(x,sample(y))$MIC}
@@ -285,7 +312,7 @@ if(MODE_SUBSECTION_D_MEASURE_TIMES){
       #mic_pvalue 
     }
     
-    
+    # call the time measurement fucntions
     print('Measureing Time for 15 atoms')
     mcb_F15_ML = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_15_ML(),replications = RBENCHMARK_REPETITION)
     mcb_F15_MM = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_15_MM(),replications = RBENCHMARK_REPETITION)
@@ -305,7 +332,7 @@ if(MODE_SUBSECTION_D_MEASURE_TIMES){
     print('Measureing Time for MIC')
     mcb_MIC = rbenchmark::benchmark(microbenchmark_wrapper_MIC(),replications = RBENCHMARK_REPETITION)
     
-    
+    #organize results and save to file
     run_times = c(
       ML_15Atoms = mcb_F15_ML$elapsed/RBENCHMARK_REPETITION,
       MM_15Atoms = mcb_F15_MM$elapsed/RBENCHMARK_REPETITION,
@@ -325,16 +352,20 @@ if(MODE_SUBSECTION_D_MEASURE_TIMES){
   }
 }
 
-
+#Generate thresholds for MIC
+#***********************
 if(MODE_SUBSECTION_E_MIC_NULL_TABLE){
+  #for each sample size
   for(current_N_i in 1:length(N_vec)){
     current_N = N_vec[current_N_i]
     print(paste0("MIC null table for N: ",current_N))
     NR.WORKERS = NR_CORES
+    
+    #we define a cluster of workers
     cl <- makeCluster(NR.WORKERS)
     registerDoParallel(cl)
     
-    
+    # this is the base worker funcion in each cluster
     MIC_worker_function = function(){
       
       NR_REPS_PER_WORKER = ceiling(NULL_TABLE_SIZE/NR.WORKERS)
@@ -345,9 +376,13 @@ if(MODE_SUBSECTION_E_MIC_NULL_TABLE){
       return(NULL_DIST)
     }
     
+    # run to get results
     MIC_null_dist_res <- foreach(i=1:NR.WORKERS, .options.RNG=1234) %dorng% { MIC_worker_function() }
+    # get this as array
     MIC_null_dist_as_array = unlist(MIC_null_dist_res)
+    #compute threshold
     MIC_THRESHOLD_VALUE = as.numeric(quantile(MIC_null_dist_as_array,probs = 1-alpha))
+    #save threshold to file
     filename_MIC = get_filename_MIC_Threshold(current_N)
     save(MIC_THRESHOLD_VALUE,file = filename_MIC)
     stopCluster(cl)
@@ -355,10 +390,15 @@ if(MODE_SUBSECTION_E_MIC_NULL_TABLE){
   
 }
 
+#Generate Null tables for MinP/ADP
+#***********************
 if(MODE_SUBSECTION_F_GENERATE_NULL_TABLES){
+   #for each sample size
     for(current_N_i in 1:length(N_vec)){
       current_N = N_vec[current_N_i]
       print(paste0('Building Null Tables for N: ',current_N))
+      #generate null tables for 15,30,45,60 atoms. Variants are mXl and mXm
+      
       set.seed(1)
       NULL_TABLES  = list()
       NULL_TABLES[[1]] = Fast.independence.test.nulltable(current_N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 15)
@@ -370,6 +410,7 @@ if(MODE_SUBSECTION_F_GENERATE_NULL_TABLES){
       NULL_TABLES[[7]] = Fast.independence.test.nulltable(current_N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 60)
       NULL_TABLES[[8]] = Fast.independence.test.nulltable(current_N,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 60, variant = 'ADP-EQP')
       
+      #save results to null table file, for specific N
       PROPOSED_TESTS = c('ML_15ATOMS','MM_15ATOMS','ML_30ATOMS','MM_30ATOMS','ML_45ATOMS','MM_45ATOMS','ML_60ATOMS','MM_60ATOMS')
       names(NULL_TABLES) = PROPOSED_TESTS
       filename = get_filename_ADP_Null_Tables(current_N)
@@ -379,16 +420,23 @@ if(MODE_SUBSECTION_F_GENERATE_NULL_TABLES){
 
 
 #Subsection G: Run Scenarios (multiple core)
+#***********************
 if(MODE_SUBSECTION_G_RUN_SCENARIOS){
-  
+  #This will store the simulation results
   Simulation_results = NULL
   
+  #This is the worker function, for each worker node in the cluster.
+  #SCENARIO_ID - 1,2,3,4 - this is the scenario being run
+  #sample_size_index - the index of the sample size used, out of N_vec
   POWER_SIM_WORKER_FUNCTION = function(SCENARIO_ID,sample_size_index){
     
+    #this is a different R session, we load all the parameters we need, along with results for MIC threshold and null tables.
+    # we also load the packages
     library(HHG)
     library(dHSIC)
     library(minerva)
     library(energy)
+    
     current_N = N_vec[sample_size_index]
     load(file = get_filename_MIC_Threshold(current_N)) #=> MIC_THRESHOLD_VALUE
     load(file = get_filename_ADP_Null_Tables(current_N)) #=> NULL_TABLES
@@ -397,46 +445,64 @@ if(MODE_SUBSECTION_G_RUN_SCENARIOS){
     result_names = c('REPS',names(NULL_TABLES),'dCOV','dHSIC','MIC')
     results = matrix(0,nrow = 1,ncol = length(result_names))     
     colnames(results) = result_names
+    
+    #repeat by the required number of repetitions PER WORKER
+    
     for(i in 1:NR_REPS_PER_WORKER){
+      # generate data
       data = Scenario_list[[SCENARIO_ID]](current_N,N_vec[length(N_vec)])
       x = data[1,]
       y = data[2,]
       
-      results[1,1] = results[1,1] + 1
+      
+      results[1,1] = results[1,1] + 1 # this counts the number of repetitions
+      # run our tests. Remember that parameters are defined by the null tables, so we are just iterating over null tables
       for(n in 1:length(NULL_TABLES)){
         MinP_res = Fast.independence.test(x,y,NullTable = NULL_TABLES[[n]])
         results[1,n + 1] = results[1,n + 1] + 1 *(MinP_res$MinP.pvalue  <= alpha) 
       }
       
+      #run dCOV
       dCov_res = energy::dcov.test(x,y,R = PERMUTATIONS_FOR_TEST)
       results[1,length(NULL_TABLES) + 2] = results[1,length(NULL_TABLES) + 2] + 1 * (dCov_res$p.value <= alpha)
       
+      #run dHSIC
       dHSIC_res = dHSIC::dhsic.test(x, y, method="permutation", B = PERMUTATIONS_FOR_TEST)
       results[1,length(NULL_TABLES) + 3] = results[1,length(NULL_TABLES) + 3] + 1 * (dHSIC_res$p.value <= alpha)
       
+      #run MIC
       MIC_res = mic_res = minerva::mine(x,y)
       results[1,length(NULL_TABLES) + 4] = results[1,length(NULL_TABLES) + 4] + 1 * (MIC_res$MIC >= MIC_THRESHOLD_VALUE)
     }
     return(results)
   }
   
+  #these are the scenarios to be run in the simulation. By default, it is all of them.
   Scenarios_to_run = 1:NR_SCENARIOS
   
+  # for each of the sample sizes
   for(current_N_ind in 1:length(N_vec)){
     Simulation_results = NULL
     current_N = N_vec[current_N_ind]
+    # we iterate over the scenarios
     for(SCENARIO_ID_FOR_SIM  in Scenarios_to_run){
+      
       print(paste0('Running Scenario ID ',SCENARIO_ID_FOR_SIM,' N index :',current_N_ind,' Sample size: ',current_N))
+      
+      # we start a cluster of the required number of workers
       NR.WORKERS = NR_CORES
       cl <- makeCluster(NR.WORKERS)
       registerDoParallel(cl)
       SCENARIO_SIM_RESULTS <- foreach(i=1:NR.WORKERS, .options.RNG=1234,.combine = 'rbind') %dorng% { POWER_SIM_WORKER_FUNCTION(SCENARIO_ID_FOR_SIM,current_N_ind) }
       stopCluster(cl)
+      
+      #gather the results from the different workers, and save them to file
       sim_results_as_row = apply(SCENARIO_SIM_RESULTS,2,sum)
       save(sim_results_as_row,file = paste0('ind_sim_results_as_row_',SCENARIO_ID_FOR_SIM,'_N_',current_N,'.RData'))
       Simulation_results = rbind(Simulation_results,sim_results_as_row) 
     }
-    
+    # power is obtained by dividing the number of rejecetions, by the number of repetitions.
+    # (note that the number of repetitions may be a bit higher than required, as it is a complete multiple of the number of cores)
     Power_results = Simulation_results
     for(i in 1:nrow(Power_results))
       Power_results[i,] = Power_results[i,] / Power_results[i,1]
@@ -445,15 +511,17 @@ if(MODE_SUBSECTION_G_RUN_SCENARIOS){
   }
 }
 
-#Subsection H: Analyze Results
+#Subsection H: Analyze Results - plot power and runtime by different N
+#***********************
 if(MODE_SUBSECTION_H_ANALYZE_RESULTS){
-  
+  # for each of the sample sizes, we load the data
   for(current_N_index in 1:length(N_vec)){
     current_N = N_vec[current_N_index]
     
     load(file = get_filename_Power_Results(current_N)) # => Power_results
     load(file = get_filename_timemeasurements(current_N)) #=> run_times
     
+    # organize the reults in a long format, readable by ggplot 2
     colnames(Power_results) = c("REPS","mXl, 15 Atoms", "mXm, 15 Atoms", "mXl, 30 Atoms", "mXm, 30 Atoms", "mXl, 45 Atoms", "mXm, 45 Atoms", "mXl, 60 Atoms", "mXm, 60 Atoms", "dCOV", "dHSIC" , "MIC" )
     #run_times
     power_res_plot = data.frame(Test = NA, Scenario = NA, RunTime = NA, Power = NA)
@@ -473,6 +541,7 @@ if(MODE_SUBSECTION_H_ANALYZE_RESULTS){
     power_res_plot$Scenario = factor(power_res_plot$Scenario ,levels = c('Line','Exp2x','Circles','Sine'))
     Test_names_vec = colnames(Power_results)[c(10,11,12,2,4,6,8,3,5,7,9)]
     
+    #plot to file
     pdf(get_filename_Power_Results_Graph(current_N), width = 8, height = 3)
     
     print(ggplot(power_res_plot) + geom_point(aes(x = log(RunTime) , y = Power ,shape = Test,color = Test))+facet_wrap(~Scenario,nrow = 1,ncol = 4) +
@@ -485,7 +554,10 @@ if(MODE_SUBSECTION_H_ANALYZE_RESULTS){
  
 }
 
+#Subsection I: Analyze Results - plot power for all N.
+#***********************
 if(MODE_SUBSECTION_I_PLOT_POWER_BY_N){
+  #we load data for all N's
   cols_ind_to_graph = c(6,10,11,12)
   power_list = list()
   for(current_N_ind in 1:length(N_vec)){
@@ -508,7 +580,7 @@ if(MODE_SUBSECTION_I_PLOT_POWER_BY_N){
   power_matrix$Power = as.numeric(power_matrix$Power)
   power_matrix$Scenario = factor(power_matrix$Scenario,levels = Scenario_names)
   
-  
+  #plot to file
   pdf("IndPower_by_N.pdf", width = 8, height = 2.5)
   
   ggplot(data = power_matrix,mapping = aes(x= N,y = Power,color = Test)) +geom_point()+geom_line() +

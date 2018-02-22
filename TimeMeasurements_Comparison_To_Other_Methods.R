@@ -1,39 +1,52 @@
 #This is a script for comparing time measurements to other methods
-setwd('~')
-library(microbenchmark)
+# See brill-heller-heller.R for an index used for running all scripts.
+
+#setwd('~') #set in main script, disabled here
+
+library(rbenchmark) #Times are measured with the R benchmark package
 library(HHG)
 library(dHSIC)
 library(minerva)
 library(energy)
 
-MODE_TIME_RESULTS_BY_N = TRUE
-MODE_TIME_RESULTS_BY_NR_ATOMS = TRUE
+MODE_TIME_RESULTS_BY_N = FALSE #This Section is 
+MODE_TIME_RESULTS_BY_NR_ATOMS = FALSE #This Section is used for measuring the time for statistic computation, for different number of atoms
+MODE_COMBINED_TIME_CHART = TRUE # This section plots the results from both the previous sections toghether
+
 
 if(MODE_TIME_RESULTS_BY_N){
-  
+  #number of repetitions for time benchmark  
   MICROBENCHMARK_REPETITION = 100
+  #sample sizes for running time comparison
   N_VEC = seq(500,5000,500)
+  #Null table size, and number of permutations. Both are 1000.
   NULL_TABLE_SIZE = 1000
   PERMUTATIONS_FOR_TEST = 1000
+  #table for storing results
   time_results = data.frame(Test = NA, N = NA,Time = NA)
   
   row = 1
   
+  #wrapper for measuring time, for MinP over ADP, 45 atoms
   microbenchmark_wrapper_Fast_NA_45_ML = function(){
     Fast.independence.test(x,y,mmax = MMAX,nr.perm = NULL_TABLE_SIZE,nr.atoms = 45)
   }
   
+  #wrapper for measuring time, dcov
   microbenchmark_wrapper_dcov = function(){
     energy::dcov.test(x,y,R = PERMUTATIONS_FOR_TEST)
   }
   
+  #wrapper for measuring time, dHSIC
   microbenchmark_wrapper_dHSIC = function(){
     dHSIC::dhsic.test(x, y, method="permutation", B = PERMUTATIONS_FOR_TEST)
   }
   
+  #wrapper for measuring time for MIC
   microbenchmark_wrapper_MIC = function(){
     mic_res = minerva::mine(x,y)
-    #MIC if very time expensive for full 1000 permutation test and time repetitions. We will compute a single statistic and multiply time by 1001, to imitate a full null table.
+    #MIC is very time expensive for full 1000 permutation test and time repetitions.
+    #We will compute a single statistic and multiply time by 1001, to imitate a full null table.
     #mic_res = minerva::mine(x,y)
     #mine_permutations = rep(NA,1000)
     #for(b in 1:1000){print(b);mine_permutations[b] = minerva::mine(x,sample(y))$MIC}
@@ -41,10 +54,10 @@ if(MODE_TIME_RESULTS_BY_N){
     #mic_pvalue 
   }
   
-  
+  # for each sample size, measure times
   for(n_i in 1:length(N_VEC)){
     
-    
+    #generate data
     set.seed(1)
     current_N = N_VEC[n_i]
     x = rnorm(current_N)
@@ -52,6 +65,7 @@ if(MODE_TIME_RESULTS_BY_N){
     
     print(paste0('Measuring Time for sample ',current_N))    
     
+    #measureing time using each of the wrappers
     print('MXL')
     mcb_F45_ML = rbenchmark::benchmark(microbenchmark_wrapper_Fast_NA_45_ML(),replications = MICROBENCHMARK_REPETITION)$elapsed/MICROBENCHMARK_REPETITION
     print('dCOV')
@@ -66,7 +80,7 @@ if(MODE_TIME_RESULTS_BY_N){
     time_results[row,] = c('dHSIC',current_N,mcb_dHSIC) ; row = row + 1
     time_results[row,] = c('MIC',current_N,mcb_MIC) ; row = row + 1
   }
-  
+  #save results
   time_results$N = as.numeric(time_results$N)
   time_results$Time = as.numeric(time_results$Time)
   save(time_results,file = 'Time_Results_Comparison.RData')
@@ -79,17 +93,18 @@ if(MODE_TIME_RESULTS_BY_NR_ATOMS){
   
   #we measure times for ADP in this section
   set.seed(1)
-  #nr atoms, in a lattice for simulation
+  #nr atoms, in a lattice for simulation - 100 to 300 in steps of 10
   atoms_ind= c(10:30)*10
   #measured times
   time_ind_m_10 = rep(NA,length(atoms_ind))
   time_ind_m_15 = rep(NA,length(atoms_ind))
   
-  
+  #wrapper for ADP, with mmax = 10
   microbenchmark_wrapper_MMAX_10 = function(atoms_i){
     res = HHG::hhg.univariate.ind.stat(1:300,sample(1:300),'ADP-EQP-ML',mmax = 10,nr.atoms = atoms_ind[atoms_i])
   }
   
+  #wrapper for ADP, with mmax = 15
   microbenchmark_wrapper_MMAX_15 = function(atoms_i){
     res = HHG::hhg.univariate.ind.stat(1:300,sample(1:300),'ADP-EQP-ML',mmax = 15,nr.atoms = atoms_ind[atoms_i])
   }
@@ -136,14 +151,16 @@ if(MODE_TIME_RESULTS_BY_NR_ATOMS){
   }
 }
 
-
-if(F){
-  
+# This section combines the plots from the previous two sections, to a single plot.
+if(MODE_COMBINED_TIME_CHART){
+  #load previous results
   load('time_results.RData') #=> time_results
   time_results_by_atoms = time_results
   load('Time_Results_Comparison.RData')  #=> time_results
   time_results$logN = log(time_results$N)  
   time_results$logT = log(time_results$Time)
+  
+  #organize data for ploting.
   ind_MXL = which(time_results$Test == "MXL , 45 Atoms")
   ind_dCOV = which(time_results$Test == "dCOV")
   ind_dHSIC = which(time_results$Test == "dHSIC")
@@ -161,23 +178,25 @@ if(F){
   logtime_MIC = time_results$logT[ind_MIC]
   logn_MIC = time_results$logN[ind_MIC]
   
+  #this sets the plots limits adaptively by the data
   x_lim = c( 0.97*min(time_results$logN), 1.03 * max(time_results$logN))
   y_lim = c( 0.97*min(time_results$logT), 1.03 * max(time_results$logT))
   
   
   pdf(file = './Combined_Time_Chart.pdf',width = 8,height = 4,pointsize = 8)
-  
+  #plots times by N, for all tests
   par(mfrow = c(1,2))
   lwd_param = 1
-  plot(logn_MXL,logtime_MXL, xlim = x_lim, ylim = y_lim,type = 'b', xlab = 'ln(N)', ylab = 'ln(Time[Sec]/1[Sec])', lwd = lwd_param)
+  plot(logn_MXL,logtime_MXL, xlim = x_lim, ylim = y_lim,type = 'b', xlab = 'ln(N)', ylab = 'ln(Time[Sec]/1[Sec])', lwd = lwd_param, main = 'A')
   lines(logn_dCOV,logtime_dCOV,col = 'red',type = 'b', lwd = lwd_param)
   lines(logn_dHSIC,logtime_dHSIC, col = 'blue',type = 'b', lwd = lwd_param)
   lines(logn_MIC,logtime_MIC, col = 'green',type = 'b', lwd = lwd_param)
   legend(x = 7.7, y = 2.2,col = c('black','red','blue','green'),legend = c("MXL , 45 Atoms","dCOV","dHSIC","MIC"),lty = 1, lwd = lwd_param ,pch = 1)
   
+  #plot times by atoms for ADP
   atoms_ind= c(10:30)*10
   attach(time_results_by_atoms)
-  plot(log(atoms_ind),log(time_ind_m_10),col='black',xlab='ln(Nr.Atoms)',ylab='ln(Time[Sec]/ 1[Sec])', pch='X', cex=0.8)
+  plot(log(atoms_ind),log(time_ind_m_10),col='black',xlab='ln(Nr.Atoms)',ylab='ln(Time[Sec]/ 1[Sec])', pch='X', cex=0.8, main = 'B')
   points(log(atoms_ind),log(time_ind_m_15),col='red',cex=1)
   model_ind = lm(log(time_ind_m_10)~log(atoms_ind))
   abline(model_ind$coefficients[1],model_ind$coefficients[2],col='black',lty=2,lwd = 1)
