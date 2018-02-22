@@ -121,30 +121,30 @@ $(document).ready(function () {
 </div>
 
 
-<div id="hhg_large_sample_framework" class="section level1">
-<h1>HHG_large_sample_framework</h1>
-<p>This Git repository houses the Code and framework for the simulations and results of the paper regarding the nonparametric test of independence given in <span class="math inline">\(\verb|Fast.independence.test|\)</span>. This test is computationally efficient for large sample sizes.</p>
+<div id="simulation-framwork-for-non-parametric-independence-testing-for-large-sample-sizes-using-package-hhg" class="section level1">
+<h1>Simulation framwork for non parametric independence testing for large sample sizes, using package HHG</h1>
+<p>This Git repository houses the Code and framework for the simulations and results of the paper regarding the nonparametric test of independence given in the function Fast.independence.test(…). This test is computationally efficient for large sample sizes.</p>
 <div id="directory-structure" class="section level2">
 <h2>Directory structure</h2>
 <p>The Script files are as follows:</p>
 <ul>
-<li><p><span class="math inline">\(\verb|brill-heller-heller.R|\)</span> - This is the index file running all other files. This script also shows the usage examples detailed in the paper and used to produce the example outputs for the test. The script also graphs the ADP plot used for the description of the algorithm used in the paper.</p></li>
-<li><p><span class="math inline">\(\verb|Power_Sim_Ind.R|\)</span> - This simulation script runs the power simulations for large sample sizes, comparing the <span class="math inline">\(MinP\)</span>/<span class="math inline">\(S^{m\times l}\)</span> test to other tests of independence available on CRAN. The script produces graphs for the different setting, along with run time and power measurements for different sample sizes. Plots produced for results include power by logarithm of runtime, for the different scenarios (and sample sizes) and power by different sample sizes.</p></li>
-<li><p><span class="math inline">\(\verb|Power_Sim_KS.R|\)</span> - This simulation script runs the power simulations for large sample sizes, for the K-sample tets. The script plots the different scenarios, along with a graph for power by logarithm of runtime.</p></li>
-<li><p><span class="math inline">\(\verb|TimeMeasurements_Comparison_To_Other_Methods.R|\)</span> - The script runs simulations measuring times for the different tests for different sample sizes. An additional simulation measures the run time of the test of a different number of Atoms (method resolution parameter, setting a tradeoff between runtime and computational complexity)</p></li>
-<li><p><span class="math inline">\(\verb|PowerSimulation_SmallN.R|\)</span> - This script performs a power simulation for small sample sizes (<span class="math inline">\(N = 10, 20, 30, 40\)</span>), comparing the power of the method to the spearman test.</p></li>
+<li><p><strong>brill-heller-heller.R</strong> - This is the index file running all other files. This script also shows the usage examples detailed in the paper and used to produce the example outputs for the test. The script also graphs the ADP plot used for the description of the algorithm used in the paper.</p></li>
+<li><p><strong>Power_Sim_Ind.R</strong> - This simulation script runs the power simulations for large sample sizes, comparing the <em>MinP</em> test to other tests of independence available on CRAN. The script produces graphs for the different setting, along with run time and power measurements for different sample sizes. Plots produced for results include power by logarithm of runtime, for the different scenarios (and sample sizes) and power by different sample sizes.</p></li>
+<li><p><strong>Power_Sim_KS.R</strong> - This simulation script runs the power simulations for large sample sizes, for the K-sample tets. The script plots the different scenarios, along with a graph for power by logarithm of runtime.</p></li>
+<li><p><strong>TimeMeasurements_Comparison_To_Other_Methods.R</strong> - The script runs simulations measuring times for the different tests for different sample sizes. An additional simulation measures the run time of the test of a different number of Atoms (method resolution parameter, setting a tradeoff between runtime and computational complexity)</p></li>
+<li><p><strong>PowerSimulation_SmallN.R</strong> - This script performs a power simulation for small sample sizes (N = 10, 20, 30, 40), comparing the power of the method to the spearman test.</p></li>
 </ul>
 <p>Other files in the directory are the simulation results and graphs</p>
 </div>
 <div id="reproducability" class="section level2">
 <h2>Reproducability</h2>
-<p>All simulation results and graphs used in producing the paper, are available in this repository. Simulation flags (in each file) are configured such that if scripts are run, long simulations (taking hours/ days) are loaded from memory (and not rerun), All graphs and figures are fully reproduced. To rerun simualtions, change the <span class="math inline">\(\verb|MODE|\)</span> flags at the top of each file to <span class="math inline">\(\verb|TRUE|\)</span>.</p>
+<p>All simulation results and graphs used in producing the paper, are available in this repository. Simulation flags (in each file) are configured such that if scripts are run, long simulations (taking hours/ days) are loaded from memory (and not rerun), All graphs and figures are fully reproduced. To rerun simualtions, change the ‘MODE_XXX’ flags at the top of each file to TRUE.</p>
 <p>Power simulations were run on a C5.18XL amazon machine with 72 cores. The number of cores in each simulation is set according to the machine parameters it is run on. To fully reproduce paper result, please set number of cores to 72. Running times were measured on a single core. On a different machine, running times may differ.</p>
 </div>
 <div id="further-reading" class="section level2">
 <h2>Further Reading</h2>
 <ul>
-<li><p>A detailed vignette is available in our CRAN packge. Install the latest packge using <span class="math inline">\(\verb|install.packages('HHG')|\)</span> using R. The vignette is available using <span class="math inline">\(\verb|vignette('HHG')|\)</span></p></li>
+<li><p>A detailed vignette is available in our CRAN packge. Install the latest packge using <strong>install.packages(‘HHG’)</strong> in R. The vignette is available using <strong>‘vignette(“HHG”)’</strong></p></li>
 <li><p>Further simulations and theory regarding the method for nonparametric independence testing, is available in papers published:</p></li>
 </ul>
 <ol style="list-style-type: decimal">
