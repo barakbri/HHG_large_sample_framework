@@ -1,11 +1,15 @@
-# This file contains the code for the paper by Brill, Heller, Heller
-# This file is the main index file, it is used to run all other files. 
-# See the flags section below, on what each part of the code base does
-# date 2018-02-22
-# flags for running the different sections
+############################################################################
+# This file contains the code for the paper by Brill, Heller, Heller       #
+# This file is the main index file, it is used to run all other files.     #
+# See the flags section below, on what each part of the code base does     #
+# date 2018-02-26                                                          #
+############################################################################
+
+# See repository https://barakbri.github.io/HHG_large_sample_framework/ for updated version, full simulation results and graphs
 
 #################
 # flags:
+# flags for running the different sections              
 #################
 PART_1_USAGE_EXAMPLES = TRUE #Independence tests usage cases and plots. This is the example used to create the example output.
 PART_2_KSAMPLE_USAGE_EXAMPLES = TRUE #K-Sample tests usage cases and plots  . This was used to create the example for the K-Sample test.
@@ -87,15 +91,15 @@ if(PART_1_USAGE_EXAMPLES){
   }
   
   #Create data sample
-  batman = batman_curve()
+  batman = batman_curve() # we create a noiseless curve
   n = 1200
   sigma = 1
-  ind_sample = sample(1:length(batman$x), size = n, replace = T)
-  x = batman$x[ind_sample] + rnorm(n,0,sigma)
+  ind_sample = sample(1:length(batman$x), size = n, replace = T) # we sampke n=1200 points on the curve
+  x = batman$x[ind_sample] + rnorm(n,0,sigma) #we add normal noise, on each axis to the points
   y = batman$y[ind_sample] + rnorm(n,0,sigma)
   
   #plot to file
-  PLOT_TO_FILE = T
+  PLOT_TO_FILE = T #turn to F, to view plot in R
   if(PLOT_TO_FILE){
     
     png('BatMan_plot.png',
@@ -117,27 +121,36 @@ if(PART_1_USAGE_EXAMPLES){
   
   #generate null table, using base paramters, m.max = 10, nr.atoms = 40.
   nt                      = Fast.independence.test.nulltable(n)
+  # one can change the number of atoms, maximum partition size and number of permutations in table via the function parameters.
+  # see '?Fast.independence.test.nulltable' for additional details
   
-  #run test, using null table
+  #run test, using null table. All parameters for method (N_A, m.max, LRT/Pearson score) are taken from the generated null table
   res = Fast.independence.test(x,y,nt)
   res$MinP.pvalue #0.009950249
   
-  #run test, same sample size, same null table
-  x.2 = rnorm(1200)
+  #the test is distribution free. As such, we can utilize the same null table generated, to test for independence
+  #in a different sample, with the same sample size
+  
+  #run test, same sample size = same null table:
+  
+  x.2 = rnorm(1200) #generate some data, same sample size
   y.2 = x.2 + rnorm(1200)
-  res2 = Fast.independence.test(x.2,y.2,nt)
+  res2 = Fast.independence.test(x.2,y.2,nt) #use the same null table
   res2$MinP.pvalue #0.004975124
   
-  #run Batman with dcov
+  # run Batman with dcov. dcov is a non parametric test of independence. See '?energy' for additional details.
+  # method of G. J. Szekely and M. L. Rizzo (2013)
   dcov.res = energy::dcov.test(x,y,R=1000)
   dcov.res$p.value #0.5294705
   
-  #dHSIC
+  #dHSIC - kernel based test on independence - method of Gretton et al. (2007)
   dHSIC.res = dHSIC::dhsic.test(x, y, method="permutation", B = 1000)
   dHSIC.res$p.value #0.3786214
   
-  #mic
+  #mic - non parametric distribution free test. Method of Reshef et al. (2011)
   mic_res = minerva::mine(x,y)$MIC
+  #for us to compute a P-value, we need to perform permutations manually.
+  We estimate the null distribution by sampling statistics, such that Y is permuted against value of X
   mine_permutations = rep(NA,1000)
   for(b in 1:1000){print(b);mine_permutations[b] = minerva::mine(x,sample(y))$MIC}
   mic_pvalue = (1+sum(mine_permutations>mic_res))/1001
@@ -165,7 +178,7 @@ if(PART_2_KSAMPLE_USAGE_EXAMPLES){
   
   #plot two sample density to file
   
-  PLOT_TO_FILE = T
+  PLOT_TO_FILE = T #Set to F, in order to see density plots in R
   if(PLOT_TO_FILE){
     pdf('TwoSample-Example.pdf',height = 2)
   }
@@ -182,45 +195,51 @@ if(PART_2_KSAMPLE_USAGE_EXAMPLES){
   test_data = sample_data()
   X = test_data$x
   Y = test_data$y
-  #generate null table
+  
+  #generate null table:
   nt = hhg.univariate.ks.nulltable(c(500,500), # This is the sample size
                                    variant = "KSample-Equipartition", #there are two variants: "KSample-Variant" for small data samples and 'KSample-Equipartition' for large data samples
                                    mmax = 10, # parameter for m.max
                                    nr.atoms = 30, #number of atoms
                                    nr.replicates = 10^4) #number of replicates in tables. This gives the minimum P-value attainable by the permutation test
   
-  #run test - parameters are taken from the null table
+  #run test - parameters are taken from the null table (variant, m.max, nr.atoms)
   res = hhg.univariate.ks.combined.test(X,Y,nt)  
   res
   res$MinP.pvalue #0.0065
   
-  #run kmmd, does not reject
+  # we also run competitor tests on the example:
+  
+  #we compare to kmmd, the method presented in Gretton et al., (2006)
   kmmd_res = kernlab::kmmd(matrix(X[Y==0],ncol = 1)
                                      ,matrix(X[Y==1],ncol = 1),asymptotic = TRUE,ntimes = 1000)
-  kmmd_res@H0 #False
+  kmmd_res@H0 #False - test does not reject
   kmmd_res@AsympH0 #False
   kmmd_res@Asymbound #0.004048766
   kmmd_res@Radbound #0.2442518
   kmmd_res@mmdstats #0.033663244 -0.001152192
   
-  #run energy, does not reject
+  
+  #run energy,method of Szekely, G. J. and Rizzo, M. L. (2004) 
   energy_res = energy::eqdist.etest(X,sizes = c(500,500),distance = FALSE,R=1000)
   energy_res #0.4535
   
-  #distribution freedom - null table can be used for any test of required size:
+  
+  #Distribution Freedom - The test is distribution free. As such, the null table can be used for any test of required size:
   set.seed(1)
-  X2 = rnorm(length(Y),0,1)+1*Y
-  res2 = hhg.univariate.ks.combined.test(X2,Y,nt)  
+  X2 = rnorm(length(Y),0,1)+1*Y # generate data of the same sample size
+  res2 = hhg.univariate.ks.combined.test(X2,Y,nt) # use the same null table, for a different dataset of the same size
   res2
   res2$MinP.pvalue # 10^(-4)
   
 }
 
-# This Section draws the ADP board for Section 2 of the paper. The code deals mainyl with graphics, colors and lines.
+# This Section draws the ADP board for Section 2 of the paper. The code deals mainly with graphics, colors and lines.
 # See the paper for full explanation regarding the plot.
+
 if(PART_3_PLOT_ADP_BOARD){
   #draw the ADP board, for the methods section
-  #sample data
+  #sample data:
   set.seed(1)
   N = 50
   
@@ -228,7 +247,7 @@ if(PART_3_PLOT_ADP_BOARD){
   y = rank(3*cos(2*pi*x) -1.5*x + rnorm(N))
   x = rank(x)
   
-  PLOT_TO_FILE = T
+  PLOT_TO_FILE = T #Set to F, to see in R
   if(PLOT_TO_FILE){
     pdf('Atoms_Scheme.pdf',width     = 5,
             height    = 5,

@@ -1,5 +1,5 @@
 # Simulation framwork for non parametric independence testing for large sample sizes, using package 'HHG'
-This Git repository houses the Code and framework for the simulations and results of the paper regarding the nonparametric test of independence  given in the function Fast.independence.test(...). This test is computationally efficient for large sample sizes.
+This Git repository houses the code and framework for the simulations and results of the paper regarding the nonparametric test of independence  given in the function Fast.independence.test(...). This test is computationally efficient for large sample sizes.
 
 ## Directory structure
 
@@ -30,7 +30,7 @@ On a different machine, running times may differ.
 * A detailed vignette is available in our CRAN packge. Install the latest packge using __install.packages('HHG')__ in R.
 The vignette is available using __'vignette("HHG")'__
 
-* Further simulations and theory regarding the method for nonparametric independence testing, is available in papers published:
+* Further theory and simulations regarding the method for nonparametric independence testing, are available in papers published:
 
 1. Heller, R., Heller, Y., and Gorfine, M. (2013). A consistent multivariate test of association based on ranks of distances. Biometrika, 100(2), 503-510.
 
