@@ -63,6 +63,7 @@ NR_SCENARIOS = length(Scenario_list) # number of scenarios in the simulation
 NULL_TABLE_SIZE = 1000 # the null table size
 POWER_REPETITIONS = 2000 #Number of realizations for power evaluation
 PERMUTATIONS_FOR_TEST = NULL_TABLE_SIZE #Number of permutations for tests that require permutations
+MULTIPLIER_FOR_MINP = 10 #Multiplier for the number of repetitions for power evaluation, for the MINP procedure
 MMAX_FOR_KS = 10 #parameter for mmax
 alpha = 0.05 #Type I error level for rejection
 N1=N2 = 1000 # sample size is two groups, each of size 1000
@@ -70,10 +71,10 @@ N = N1+N2 #total sample size
 BENCHMARK_REPETITION = 100 #number of repetitions for measurement of running times
 
 #MODES:
-MODE_SUBSECTION_KS_C_PLOT_SETTINGS = TRUE # Subsection is used for plotting settings
+MODE_SUBSECTION_KS_C_PLOT_SETTINGS = FALSE # Subsection is used for plotting settings
 MODE_SUBSECTION_KS_D_GENERATE_NULL_TABLES = FALSE # Subsection used for generating null tables
 MODE_SUBSECTION_KS_E_MEASURE_TIMES = FALSE #Subsection used for meauring running times
-MODE_SUBSECTION_KS_F_RUN_SCENARIOS = FALSE #Subsection used for running the power simulation, for the different scenraio (multiple cores).
+MODE_SUBSECTION_KS_F_RUN_SCENARIOS = TRUE #Subsection used for running the power simulation, for the different scenraio (multiple cores).
 MODE_SUBSECTION_KS_G_ANALYZE_RESULTS = TRUE #Subsection used for analyzing rersults and plotting them
 
 #Subsection C: Plot Settings 
@@ -201,35 +202,46 @@ if(MODE_SUBSECTION_KS_F_RUN_SCENARIOS){
 
     NR_REPS_PER_WORKER = ceiling(POWER_REPETITIONS/NR.WORKERS)
     result_names = c('REPS',names(null_tables),'ENERGY','KMMD')
-    results = matrix(0,nrow = 1,ncol = length(result_names))     
+    results = matrix(0,nrow = 1,ncol = length(result_names))      #this stores results for the competition
+    results_MinP = matrix(0,nrow = 1,ncol = length(result_names)) #this stores results for the MinP procedure. We use two different arrays as we have a multiplier for the repetitions of data generations.     
     colnames(results) = result_names
+    colnames(results_MinP) = result_names
+    
     #for each of the required repetitions, PER WORKER
-    for(i in 1:NR_REPS_PER_WORKER){
+    for(i in 1:( NR_REPS_PER_WORKER * MULTIPLIER_FOR_MINP )){
       #we generate data for the required scenario
       data = Scenario_list[[SCENARIO_ID]](N1,N2)
       x = data$x
       y = data$y
       
       #we increment the number of tries by 1
-      results[1,1] = results[1,1] + 1
+      results_MinP[1,1] = results_MinP[1,1] + 1
       
       #We iterate over the null tables we generated, and test for rejection. note that all test parameters are stored in the null table.
       for(j in 1:length(null_tables)){
         MinP_res = hhg.univariate.ks.combined.test(x,y,null_tables[[j]])
-        results[1,j+1] = results[1,j+1] + 1 *( MinP_res$MinP.pvalue<=alpha)
+        results_MinP[1,j+1] = results_MinP[1,j+1] + 1 *( MinP_res$MinP.pvalue<=alpha)
       }
-
-      # We test using the energy statistic
-      energy_res = energy::eqdist.etest(x,sizes = c(N1,N2),distance = FALSE,R=PERMUTATIONS_FOR_TEST)
-      results[1,length(result_names)-1] = results[1,length(result_names)-1] + 1 *( energy_res$p.value<=alpha)
+      if(i %% MULTIPLIER_FOR_MINP == 0){
+        results[1,1] = results[1,1] + 1
+        # We test using the energy statistic
+        energy_res = energy::eqdist.etest(x,sizes = c(N1,N2),distance = FALSE,R=PERMUTATIONS_FOR_TEST)
+        results[1,length(result_names)-1] = results[1,length(result_names)-1] + 1 *( energy_res$p.value<=alpha)
+        
+        
+        # we test using the kmmd test
+        kmmd_res = kernlab::kmmd(matrix(x[y==0],ncol = 1)
+                                 ,matrix(x[y==1],ncol = 1),asymptotic = TRUE,ntimes = PERMUTATIONS_FOR_TEST)
+        results[1,length(result_names)] = results[1,length(result_names)] + 1 *( kmmd_res@AsympH0)  
+      }
       
-      
-      # we test using the kmmd test
-      kmmd_res = kernlab::kmmd(matrix(x[y==0],ncol = 1)
-                               ,matrix(x[y==1],ncol = 1),asymptotic = TRUE,ntimes = PERMUTATIONS_FOR_TEST)
-      results[1,length(result_names)] = results[1,length(result_names)] + 1 *( kmmd_res@AsympH0)
     }
-    return(results)
+    #normalize the tables
+    results = results / results[1,1]
+    results_MinP = results_MinP / results_MinP[1,1]
+    ret = results + results_MinP # return the results from both rows
+    ret[1,1] = 1 #normalized back to 1
+    return(ret) 
   }
   
   #these are the scenarios to be run. By default, we run all scenarios
@@ -270,7 +282,7 @@ if(MODE_SUBSECTION_KS_G_ANALYZE_RESULTS){
   load(file = 'SIMULATION_RUN_TIMES_KS.RData') #=> run_times
   
   #we organize data in a long format, as preffered by GGPLOT2
-  colnames(Power_results) = c("REPS","25 Atoms","50 Atoms", "100 Atoms","150 Atoms","ENERGY","KMMD" )
+  colnames(Power_results) = c("REPS","25 Atoms","50 Atoms", "100 Atoms","150 Atoms","ENERGY","KMMD")
   #run_times
   power_res_plot = data.frame(Test = NA, Scenario = NA, RunTime = NA, Power = NA)
   current_row = 1
@@ -291,11 +303,11 @@ if(MODE_SUBSECTION_KS_G_ANALYZE_RESULTS){
   power_res_plot$Scenario
   
   power_res_plot$Scenario <- factor(as.character(power_res_plot$Scenario), levels = Scenario_names)
-  
+  power_res_plot$Test <- factor(as.character(power_res_plot$Test), levels = colnames(Power_results)[-1])
   #we plot the result, log run time by power. Each scenario is given a different facet.
   pdf('KS_PowerResults.PDF', width = 8.5, height = 2.40)
   
-  ggplot(power_res_plot) + geom_point(aes(x = log(RunTime) , y = Power ,shape = Test,color = Test))+facet_wrap(~Scenario) +
+  ggplot(power_res_plot) + geom_point(aes(x = log(RunTime) , y = Power ,shape = Test,color = Test)) + facet_wrap(~Scenario) +
     xlab("log(RunTime[Seconds])") + ylim(c(0,1)) + theme_bw()
   
   dev.off()
