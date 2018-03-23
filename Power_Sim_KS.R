@@ -11,6 +11,7 @@ library(parallel)
 library(doParallel)
 library(foreach)
 library(doRNG)
+
 NR_CORES = detectCores() - 1 # The simulation uses the maximum number of cores available.
 # For reproducability, please run on an Amazon C5.18XL machine with 72 cores.
 # On any machine with 72 cores (or by setting NR_CORES = 71), results would be reproducible with paper.
@@ -71,10 +72,10 @@ N = N1+N2 #total sample size
 BENCHMARK_REPETITION = 100 #number of repetitions for measurement of running times
 
 #MODES:
-MODE_SUBSECTION_KS_C_PLOT_SETTINGS = FALSE # Subsection is used for plotting settings
+MODE_SUBSECTION_KS_C_PLOT_SETTINGS = TRUE # Subsection is used for plotting settings
 MODE_SUBSECTION_KS_D_GENERATE_NULL_TABLES = FALSE # Subsection used for generating null tables
 MODE_SUBSECTION_KS_E_MEASURE_TIMES = FALSE #Subsection used for meauring running times
-MODE_SUBSECTION_KS_F_RUN_SCENARIOS = TRUE #Subsection used for running the power simulation, for the different scenraio (multiple cores).
+MODE_SUBSECTION_KS_F_RUN_SCENARIOS = FALSE #Subsection used for running the power simulation, for the different scenraio (multiple cores).
 MODE_SUBSECTION_KS_G_ANALYZE_RESULTS = TRUE #Subsection used for analyzing rersults and plotting them
 
 #Subsection C: Plot Settings 
@@ -115,14 +116,15 @@ if(MODE_SUBSECTION_KS_C_PLOT_SETTINGS){
 #***********************
 if(MODE_SUBSECTION_KS_D_GENERATE_NULL_TABLES){
   set.seed(1)
-  #we generate null tables for the MinP procedure, for the Sm statistics. null tables differ by number of atoms, 25,50,100,150
+  #we generate null tables for the MinP procedure, for the Sm statistics. null tables differ by number of atoms, 10,25,50
   null_tables = list()
-  null_tables[[1]] = HHG::hhg.univariate.ks.nulltable(c(N1,N2),variant = 'KSample-Equipartition', nr.atoms = 25,mmax = MMAX_FOR_KS, nr.replicates = NULL_TABLE_SIZE)
-  null_tables[[2]] = HHG::hhg.univariate.ks.nulltable(c(N1,N2),variant = 'KSample-Equipartition', nr.atoms = 50,mmax = MMAX_FOR_KS, nr.replicates = NULL_TABLE_SIZE)
-  null_tables[[3]] = HHG::hhg.univariate.ks.nulltable(c(N1,N2),variant = 'KSample-Equipartition', nr.atoms = 100,mmax = MMAX_FOR_KS, nr.replicates = NULL_TABLE_SIZE)
-  null_tables[[4]] = HHG::hhg.univariate.ks.nulltable(c(N1,N2),variant = 'KSample-Equipartition', nr.atoms = 150,mmax = MMAX_FOR_KS, nr.replicates = NULL_TABLE_SIZE)
+  null_tables[[1]] = HHG::hhg.univariate.ks.nulltable(c(N1,N2),variant = 'KSample-Equipartition', nr.atoms = 10,mmax = MMAX_FOR_KS, nr.replicates = NULL_TABLE_SIZE)
+  null_tables[[2]] = HHG::hhg.univariate.ks.nulltable(c(N1,N2),variant = 'KSample-Equipartition', nr.atoms = 25,mmax = MMAX_FOR_KS, nr.replicates = NULL_TABLE_SIZE)
+  null_tables[[3]] = HHG::hhg.univariate.ks.nulltable(c(N1,N2),variant = 'KSample-Equipartition', nr.atoms = 50,mmax = MMAX_FOR_KS, nr.replicates = NULL_TABLE_SIZE)
+  
+  
   #save results to file
-  names(null_tables) = c('Sm 25 Atoms','Sm 50 Atoms', 'Sm 100 Atoms','Sm 150 Atoms')
+  names(null_tables) = c('Sm 10 Atoms', 'Sm 25 Atoms', 'Sm 50 Atoms')
   save(null_tables,file = 'KS_NULL_TABLES.RData')
 }
 
@@ -154,25 +156,24 @@ if(MODE_SUBSECTION_KS_E_MEASURE_TIMES){
   
   
   #run the different wrappers, and measure times.
+  print('Measuring times for Sm - 10 Atoms')
+  mcb_Sm_10 = rbenchmark::benchmark(microbenchmark_wrapper_Sm(10),replications = BENCHMARK_REPETITION)
   print('Measuring times for Sm - 25 Atoms')
   mcb_Sm_25 = rbenchmark::benchmark(microbenchmark_wrapper_Sm(25),replications = BENCHMARK_REPETITION)
   print('Measuring times for Sm - 50 Atoms')
   mcb_Sm_50 = rbenchmark::benchmark(microbenchmark_wrapper_Sm(50),replications = BENCHMARK_REPETITION)
-  print('Measuring times for Sm - 100 Atoms')
-  mcb_Sm_100 = rbenchmark::benchmark(microbenchmark_wrapper_Sm(100),replications = BENCHMARK_REPETITION)
-  print('Measuring times for Sm - 150 Atoms')
-  mcb_Sm_150 = rbenchmark::benchmark(microbenchmark_wrapper_Sm(150),replications = BENCHMARK_REPETITION)
+  
   print('Measuring times for Energy')
   mcb_ENERGY = rbenchmark::benchmark(microbenchmark_wrapper_ENERGY(),replications = BENCHMARK_REPETITION)
   print('Measuring times for kmmd')
   mcb_KMMD = rbenchmark::benchmark(microbenchmark_wrapper_KMMD(),replications = BENCHMARK_REPETITION)
   
   #save run times to disk
+ 
   run_times = c(
+    Sm_10 = mcb_Sm_10$elapsed/BENCHMARK_REPETITION,
     Sm_25 = mcb_Sm_25$elapsed/BENCHMARK_REPETITION,
     Sm_50 = mcb_Sm_50$elapsed/BENCHMARK_REPETITION,
-    Sm_100 = mcb_Sm_100$elapsed/BENCHMARK_REPETITION,
-    Sm_150 = mcb_Sm_150$elapsed/BENCHMARK_REPETITION,
     ENERGY = mcb_ENERGY$elapsed/BENCHMARK_REPETITION,
     KMMD = mcb_KMMD$elapsed/BENCHMARK_REPETITION
   )
@@ -232,7 +233,7 @@ if(MODE_SUBSECTION_KS_F_RUN_SCENARIOS){
         # we test using the kmmd test
         kmmd_res = kernlab::kmmd(matrix(x[y==0],ncol = 1)
                                  ,matrix(x[y==1],ncol = 1),asymptotic = TRUE,ntimes = PERMUTATIONS_FOR_TEST)
-        results[1,length(result_names)] = results[1,length(result_names)] + 1 *( kmmd_res@AsympH0)  
+        results[1,length(result_names)] = results[1,length(result_names)] + 1*( kmmd_res@AsympH0)  
       }
       
     }
@@ -282,7 +283,7 @@ if(MODE_SUBSECTION_KS_G_ANALYZE_RESULTS){
   load(file = 'SIMULATION_RUN_TIMES_KS.RData') #=> run_times
   
   #we organize data in a long format, as preffered by GGPLOT2
-  colnames(Power_results) = c("REPS","25 Atoms","50 Atoms", "100 Atoms","150 Atoms","ENERGY","KMMD")
+  colnames(Power_results) = c("REPS","10 Atoms","25 Atoms","50 Atoms","ENERGY","KMMD")
   #run_times
   power_res_plot = data.frame(Test = NA, Scenario = NA, RunTime = NA, Power = NA)
   current_row = 1
@@ -312,4 +313,37 @@ if(MODE_SUBSECTION_KS_G_ANALYZE_RESULTS){
   
   dev.off()
   
+  
+  # This code sections prints the power results to table:
+  library(xtable)
+  power_res_plot_to_tex = power_res_plot
+  power_res_plot_to_tex$RunTime = round(power_res_plot_to_tex$RunTime,digits = 2)
+  power_res_plot_to_tex$Power = round(power_res_plot_to_tex$Power,digits = 3)
+  power_res_plot_to_tex
+  NR_TESTS = 5
+  pointer = 1
+  matrix_res_power = matrix(NA,nrow =  NR_SCENARIOS,ncol = NR_TESTS)
+  colnames(matrix_res_power) = c("10 Atoms", "25 Atoms", "50 Atoms", "ENERGY", "KMMD" )
+  rownames(matrix_res_power) = Scenario_names
+  matrix_res_runtime = matrix(NA,nrow =  1,ncol = NR_TESTS)
+  colnames(matrix_res_runtime) = c("10 Atoms", "25 Atoms", "50 Atoms", "ENERGY", "KMMD" )
+  
+  for(j in 1:NR_SCENARIOS){
+    for(i in 1:NR_TESTS){
+      cell_power = power_res_plot_to_tex$Power[pointer]
+      cell_runtime = power_res_plot_to_tex$RunTime[pointer]
+      #cell_string = paste0(cell_power,'/',cell_runtime)
+      matrix_res_power[j,i] = cell_power
+      matrix_res_runtime[1,i] = cell_runtime
+      pointer = pointer +1
+    }
+  }
+  
+  sink(file = './tables_for_KS_results.txt')
+  xtable(matrix_res_power,digits = 3)
+  cat('\n\r')
+  cat('\n\r')
+  cat('\n\r')
+  xtable(matrix_res_runtime)
+  sink()
 }
